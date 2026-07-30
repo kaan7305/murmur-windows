@@ -1,0 +1,21 @@
+# Local working notes and editor state. Not part of the published project.
+CLAUDE.md
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Build output. build.bat regenerates all of it:
+#   build\   PyInstaller's work directory      (~33 MB)
+#   dist\    the frozen app, installer, GPU pack (~2 GB)
+build/
+dist/
+
+# Drawn from logo.py by build.bat, step 1 of 4.
+murmur.ico
+
+# Scratch captures, kept out of the history because they are regenerated
+# whenever a screen changes and none of them is a source file.
+_*.png

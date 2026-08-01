@@ -67,7 +67,13 @@ import startup
 import stats
 from hotkeys import GlobalHotkey
 from overlay import IdlePill, RecordingOverlay
+from theme import font
 from ui import MainWindow
+
+# Type size for the tray and pill menu. Windows' own default is 9pt, which is
+# small for a menu opened from a floating pill rather than from a menu bar.
+# One number, here, because it is the thing most likely to want adjusting.
+MENU_PT = 20.0
 
 
 def tray_icon(active: bool = False) -> QtGui.QIcon:
@@ -125,6 +131,10 @@ class Murmur(QtCore.QObject):
         self.tray = QtWidgets.QSystemTrayIcon(tray_icon(), self.app)
         self.tray.setToolTip("Murmur")
         menu = QtWidgets.QMenu()
+        # Setting the font rather than a stylesheet leaves Qt to work the row
+        # heights out from it, and keeps the menu looking like a Windows menu
+        # in both light and dark rather than like a repainted imitation.
+        menu.setFont(font(MENU_PT))
         self.act_state = menu.addAction("Loading model ...")
         self.act_state.setEnabled(False)
         menu.addSeparator()

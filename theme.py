@@ -46,7 +46,38 @@ TIER_COLOUR = {
 }
 
 
+# ── text size ──────────────────────────────────────────────────────────────
+# Every size in this file and the pages is a point size somebody chose while
+# looking at their own screen. This multiplies all of them at once, so a person
+# who finds the interface small can say so once instead of losing an argument
+# with it. Windows' own display scaling is the right answer when everything is
+# too small; this is for when only Murmur is.
+
+#: What the sizes in the code are written against.
+SCALE = 1.0
+
+#: Offered on the Sound page. Keep the labels short - they are radio buttons,
+#: not documentation.
+SCALES = [("Normal", 1.0), ("Large", 1.15), ("Larger", 1.3), ("Largest", 1.5)]
+
+
+def set_scale(value: float) -> None:
+    """Set the multiplier. Call before any widget is built.
+
+    Nothing re-reads this: a QFont is copied into a widget when it is set, so
+    changing the scale after the window exists leaves every existing label at
+    its old size. The setting therefore says it applies on restart, which is
+    honest and costs one relaunch, rather than half-applying and looking broken.
+    """
+    global SCALE
+    try:
+        SCALE = min(2.0, max(0.8, float(value)))
+    except (TypeError, ValueError):
+        SCALE = 1.0
+
+
 def font(size: float, weight: int = 400) -> QtGui.QFont:
+    size = size * SCALE
     f = QtGui.QFont("Segoe UI Variable Display", int(size))
     if not QtGui.QFontInfo(f).exactMatch():
         f = QtGui.QFont("Segoe UI", int(size))

@@ -61,13 +61,14 @@ def ask_running_instance_to_show() -> None:
         sock.waitForBytesWritten(400)
         sock.disconnectFromServer()
 
+import history
 import logo
 import murmur as core
 import startup
 import stats
 from hotkeys import GlobalHotkey
 from overlay import IdlePill, RecordingOverlay
-from theme import font
+from theme import font, set_scale
 from ui import MainWindow
 
 # Type size for the tray and pill menu. Windows' own default is 9pt, which is
@@ -90,6 +91,7 @@ class Bridge(QtCore.QObject):
     started = QtCore.Signal()
     stopped = QtCore.Signal(float)
     transcribed = QtCore.Signal(str, float, float, str)
+    redone = QtCore.Signal(str, float, str)
     failed = QtCore.Signal(str)
     status = QtCore.Signal(str)
 
@@ -110,7 +112,15 @@ class Murmur(QtCore.QObject):
         self.overlay = RecordingOverlay()
         self.pill = IdlePill()
         self.recorder = LevelRecorder(self.bridge)
-        self.jobs: queue.Queue[np.ndarray] = queue.Queue()
+        # (audio, model to use) - None means the loaded one. A retry goes
+        # through the same queue as a dictation so two transcriptions can
+        # never run at once and fight over the card.
+        self.jobs: queue.Queue[tuple] = queue.Queue()
+        # The last clip, kept so a mishearing can be retried with a better
+        # model instead of said again. One clip only: this is a second chance,
+        # not a recording of the day.
+        self._last_audio: np.ndarray | None = None
+        self._redoing = False
 
         self._build_tray()
         self._connect()
@@ -140,6 +150,17 @@ class Murmur(QtCore.QObject):
         menu.addSeparator()
         menu.addAction("Open Murmur", self._show_window)
         self.act_dictate = menu.addAction("Dictate now", self.toggle)
+
+        # Language belongs in this menu and not only on a settings page.
+        # Naming the language is 2.6x faster than letting Whisper detect it and
+        # far more accurate - but only if switching costs one right-click. Made
+        # to rebuild on every open, since the setting also changes from the
+        # window and a menu quietly disagreeing with the app is worse than no
+        # menu at all.
+        self.lang_menu = menu.addMenu("Language")
+        self.lang_menu.setFont(font(MENU_PT))
+        self.lang_menu.aboutToShow.connect(self._fill_language_menu)
+
         menu.addAction("Setup guide", self.show_guide)
         menu.addSeparator()
         menu.addAction("Quit", self._quit)
@@ -170,6 +191,7 @@ class Murmur(QtCore.QObject):
         b.started.connect(self._on_started)
         b.stopped.connect(self._on_stopped)
         b.transcribed.connect(self._on_transcribed)
+        b.redone.connect(self._on_redone)
         b.failed.connect(self._on_failed)
         b.status.connect(self.window.set_status)
         self.overlay.stop_requested.connect(self.toggle)
@@ -181,6 +203,7 @@ class Murmur(QtCore.QObject):
         self.window.sound.test_toggled.connect(self._mic_test)
         self.window.sound.pill_toggled.connect(self._pill_setting)
         self.window.sound.hotkey_changed.connect(self._change_hotkey)
+        self.window.history.redo_requested.connect(self._redo_last)
         self.window.speed.changed.connect(self.window.refresh_side_note)
         # While the Sound page is testing, feed its meter as well as the pill.
         b.level.connect(self._route_level)
@@ -236,6 +259,50 @@ class Murmur(QtCore.QObject):
         menu = self.tray.contextMenu()
         if menu is not None:
             menu.popup(point)
+
+    # ── language ────────────────────────────────────────────────────────────
+
+    def _fill_language_menu(self) -> None:
+        """Detect, then the languages actually dictated in, then the full list.
+
+        The recent list is built from use rather than configured. Someone who
+        speaks two languages should not have to declare that anywhere - the
+        second time they choose Turkish it is in the menu, and the choice they
+        never make never clutters it.
+        """
+        self.lang_menu.clear()
+        current = core.load_config().get("language") or ""
+        group = QtGui.QActionGroup(self.lang_menu)
+        group.setExclusive(True)
+
+        def entry(code: str, label: str) -> None:
+            act = self.lang_menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(code == current)
+            act.triggered.connect(lambda _=False, c=code: self._set_language(c))
+            group.addAction(act)
+
+        entry("", "Detect automatically")
+        recent = core.recent_languages()
+        # The language in use is always offered, even on the first run when
+        # nothing has been used yet and the recent list is empty.
+        if current and current not in recent:
+            recent = [current] + recent
+        if recent:
+            self.lang_menu.addSeparator()
+            for code in recent:
+                entry(code, core.language_name(code))
+        self.lang_menu.addSeparator()
+        self.lang_menu.addAction("More languages ...", self._open_languages)
+
+    def _set_language(self, code: str) -> None:
+        core.set_language(code)
+        self.window.language.refresh_language()
+        self.window.set_status(f"Dictating in {core.language_name(code)}.")
+
+    def _open_languages(self) -> None:
+        self._show_window()
+        self.window.show_page("Language")
 
     def _start_hotkeys(self, combo: str | None = None) -> None:
         """Register the dictation hotkey, replacing any previous one.
@@ -355,7 +422,8 @@ class Murmur(QtCore.QObject):
                 self.bridge.status.emit("Cancelled.")
                 return
             self.bridge.stopped.emit(len(audio) / core.SAMPLE_RATE)
-            self.jobs.put(audio)
+            self._last_audio = audio
+            self.jobs.put((audio, None))
         else:
             if self.model is None:
                 self.bridge.status.emit("Still loading the model, one moment ...")
@@ -399,12 +467,50 @@ class Murmur(QtCore.QObject):
         # rather than "since you last started the program".
         stats.record(len(text.split()), secs, target)
         self.window.home.refresh()
-        self.window.history.add(
-            text, f"{secs:.1f}s in {took:.2f}s ({speed}) - pasted into {target}")
+        meta = f"{secs:.1f}s in {took:.2f}s ({speed}) - pasted into {target}"
+        self.window.history.add(text, meta)
+        history.add(text, meta)
+        # Only the newest entry can be retried, because only its audio is
+        # still in memory. Offering the button on older cards would be a
+        # promise the process cannot keep.
+        self.window.history.offer_redo(core.better_model())
         self.window.set_status(f'Pasted into {target}  -  "{text[:60]}"')
         if self.guide is not None and self.guide.isVisible():
             self.guide.on_transcribed(text)
         core.beep("done")
+
+    def _redo_last(self) -> None:
+        """Run the last clip through a better model, on request."""
+        name = core.better_model()
+        if self._last_audio is None or not name:
+            return
+        if self._redoing:
+            return
+        if not core.is_downloaded(name):
+            # Nothing is downloaded behind the user's back. 3 GB arriving
+            # unannounced because they pressed a button labelled "redo" is
+            # not a correction anybody asked for.
+            self.window.set_status(
+                f"{name} is not downloaded yet - get it from the models "
+                f"library and the retry will use it.")
+            self._show_window()
+            self.window.show_page("Models library")
+            return
+        self._redoing = True
+        self.window.history.redo_started(name)
+        self.window.set_status(f"Transcribing that again with {name} ...")
+        self.jobs.put((self._last_audio, name))
+
+    def _on_redone(self, text: str, took: float, name: str) -> None:
+        self._redoing = False
+        if not text:
+            self.window.history.redo_finished()
+            return
+        meta = f"redone with {name} in {took:.2f}s - copied to the clipboard"
+        self.window.history.replace_latest(text, meta)
+        history.replace_latest(text, meta)
+        self.window.set_status(
+            f'{name} heard: "{text[:60]}"  -  copied to the clipboard.')
 
     def _on_failed(self, message: str) -> None:
         self.window.set_status(message)
@@ -421,7 +527,10 @@ class Murmur(QtCore.QObject):
 
     def _worker(self) -> None:
         while True:
-            audio = self.jobs.get()
+            audio, redo_with = self.jobs.get()
+            if redo_with:
+                self._redo_job(audio, redo_with)
+                continue
             secs = len(audio) / core.SAMPLE_RATE
             if secs < 0.3 or self.model is None:
                 self.bridge.failed.emit("Too short - nothing to transcribe.")
@@ -440,6 +549,36 @@ class Murmur(QtCore.QObject):
             target = core.foreground_process() or "?"
             core.paste(text)
             self.bridge.transcribed.emit(text, secs, took, target)
+
+    def _redo_job(self, audio: np.ndarray, name: str) -> None:
+        """Transcribe the last clip again with a larger model.
+
+        The model is loaded, used and dropped rather than kept: large-v3 is
+        3 GB of weights to hold for a button pressed once in a while, and the
+        model in use has to stay loaded so the next dictation is not made to
+        wait for this one.
+
+        The result is not pasted. The window that was dictated into minutes
+        ago may be anything by now, and silently typing into whatever has
+        focus is not a correction, it is a new problem. It goes to the
+        clipboard, which is where a correction is useful.
+        """
+        try:
+            t0 = time.time()
+            model = core.load_model(name)
+            text = core.transcribe(model, audio)
+            took = time.time() - t0
+            del model
+        except Exception as e:
+            self.bridge.failed.emit(f"Could not redo that with {name}: {e}")
+            self.bridge.redone.emit("", 0.0, "")
+            return
+        if not text:
+            self.bridge.failed.emit(f"{name} heard nothing in that clip either.")
+            self.bridge.redone.emit("", 0.0, "")
+            return
+        core.clipboard_set(text)
+        self.bridge.redone.emit(text, took, name)
 
     # ── window / quit ───────────────────────────────────────────────────────
 
@@ -596,6 +735,9 @@ def main() -> int:
     if "--console" not in sys.argv:
         _hide_console()
     app = QtWidgets.QApplication(sys.argv)
+    # Before any widget exists: a font is copied into a widget when it is set,
+    # so a scale applied later would only reach whatever was built after it.
+    set_scale(core.load_config().get("text_scale", 1.0))
     app.setApplicationName("Murmur")
     app.setQuitOnLastWindowClosed(False)   # closing the window keeps the tray
     app.setWindowIcon(logo.app_icon())

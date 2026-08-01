@@ -62,7 +62,7 @@ a = Analysis(
     datas=datas,
     hiddenimports=hiddenimports + ["paths", "logo", "theme", "ui", "overlay",
                                    "murmur", "gpupack", "hotkeys",
-                                   "onboarding", "startup"],
+                                   "onboarding", "startup", "history"],
     excludes=excludes,
     runtime_hooks=["rthook_no_av.py"],
     noarchive=False,

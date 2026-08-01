@@ -5,13 +5,15 @@ import time
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+import history
 import hotkeys
 import logo
 import murmur as core
 import stats as stats_mod
 import startup
+import theme
 from theme import (ACCENT, ACCENT_WASH, BG, GOOD, INK, INK_MID, INK_SOFT,
-                   LINE, LINE_SOFT, SURFACE, Button, Card, Label, font,
+                   LINE, LINE_SOFT, SCALES, SURFACE, Button, Card, Label, font,
                    nav_icon)
 
 
@@ -673,6 +675,32 @@ class SoundPage(QtWidgets.QWidget):
         av.body().addWidget(self.startup_hint)
         lay.addWidget(av)
 
+        # ── text size ──
+        # Every point size in this app is a number somebody picked on their own
+        # screen. This is the one control that says the reader gets a vote.
+        ts = Card()
+        ts.body().addWidget(Label("Text size", 12.5, 600, INK))
+        srow = QtWidgets.QHBoxLayout()
+        srow.setSpacing(8)
+        current = float(core.load_config().get("text_scale", 1.0))
+        self.scale_group = QtWidgets.QButtonGroup(self)
+        for label, value in SCALES:
+            btn = QtWidgets.QRadioButton(label)
+            btn.setFont(font(11.5))
+            btn.setStyleSheet(check_css.replace("QCheckBox", "QRadioButton")
+                              .replace("border-radius:5px", "border-radius:9px"))
+            btn.setChecked(abs(value - current) < 0.01)
+            btn.toggled.connect(
+                lambda on, v=value: self._set_scale(v) if on else None)
+            self.scale_group.addButton(btn)
+            srow.addWidget(btn)
+        srow.addStretch(1)
+        ts.body().addLayout(srow)
+        self.scale_hint = Label("Applies to the window, the tray menu and the "
+                                "pill.", 10.5, 400, INK_SOFT)
+        ts.body().addWidget(self.scale_hint)
+        lay.addWidget(ts)
+
         lay.addStretch(1)
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -683,6 +711,20 @@ class SoundPage(QtWidgets.QWidget):
         cfg = core.load_config()
         cfg[key] = value
         core.save_config(cfg)
+
+    def _set_scale(self, value: float) -> None:
+        """Save the text size, and say plainly that it needs a restart.
+
+        Qt copies a font into a widget when it is set, so nothing already on
+        screen would change. Half a window resizing while the rest stayed put
+        would look like a bug; saying so costs one relaunch and no confusion.
+        """
+        self._save("text_scale", value)
+        self.scale_hint.setText(
+            "Saved. Quit Murmur from the tray menu and start it again to see "
+            "the new size."
+            if abs(value - theme.SCALE) > 0.01 else
+            "Applies to the window, the tray menu and the pill.")
 
     def _set_startup(self, on: bool) -> None:
         """Write the Run entry, and say so if Windows would not take it.
@@ -747,6 +789,44 @@ class WordChip(QtWidgets.QFrame):
             f"border-radius:9px;}}"
             f"QPushButton:hover{{background:#E2E2E7;color:{INK};}}")
         x.clicked.connect(lambda: self.removed.emit(self.word))
+        row.addWidget(x)
+
+
+class RuleRow(QtWidgets.QFrame):
+    """One correction: what the model writes, and what it should have written."""
+
+    removed = QtCore.Signal(str)
+
+    def __init__(self, find: str, into: str) -> None:
+        super().__init__()
+        self.find = find
+        self.setObjectName("rule")
+        self.setStyleSheet(
+            f"QFrame#rule{{background:#F7F7F9;border:1px solid {LINE_SOFT};"
+            f"border-radius:9px;}}")
+        row = QtWidgets.QHBoxLayout(self)
+        row.setContentsMargins(11, 5, 5, 5)
+        row.setSpacing(8)
+
+        row.addWidget(Label(find, 11.5, 500, INK))
+        row.addWidget(Label("→", 11.5, 400, INK_SOFT))
+        # An empty replacement is a real rule - it is how "um" and "you know"
+        # come out of a transcript - but a blank space on the row reads as the
+        # interface having lost something.
+        row.addWidget(Label(into or "removed", 11.5,
+                            500 if into else 400,
+                            INK if into else INK_SOFT))
+        row.addStretch(1)
+
+        x = QtWidgets.QPushButton("×")
+        x.setCursor(QtCore.Qt.PointingHandCursor)
+        x.setFixedSize(20, 20)
+        x.setFont(font(12, 600))
+        x.setStyleSheet(
+            f"QPushButton{{border:none;background:transparent;color:{INK_SOFT};"
+            f"border-radius:10px;}}"
+            f"QPushButton:hover{{background:#E2E2E7;color:{INK};}}")
+        x.clicked.connect(lambda: self.removed.emit(self.find))
         row.addWidget(x)
 
 
@@ -894,19 +974,72 @@ class LanguagePage(QtWidgets.QWidget):
 
         lay.addWidget(vocab)
 
+        # ── output rules ──
+        # Vocabulary leans on what the model hears; this fixes what it writes.
+        # Two cards rather than one, because confusing them wastes prompt space
+        # on words that were never misheard in the first place.
+        rules = Card()
+        rules.body().addWidget(Label("Corrections", 12.5, 600, INK))
+
+        rule_row = QtWidgets.QHBoxLayout()
+        rule_row.setSpacing(9)
+        self.rule_find = QtWidgets.QLineEdit()
+        self.rule_find.setPlaceholderText("What it writes")
+        self.rule_into = QtWidgets.QLineEdit()
+        self.rule_into.setPlaceholderText("What you wanted")
+        for box in (self.rule_find, self.rule_into):
+            box.setFont(font(11.5))
+            box.setMinimumHeight(36)
+            box.setStyleSheet(
+                f"QLineEdit{{border:1px solid {LINE};border-radius:9px;"
+                f"padding:6px 12px;background:{SURFACE};color:{INK};}}"
+                f"QLineEdit:focus{{border:1.5px solid {ACCENT};}}")
+            box.returnPressed.connect(self._add_rule)
+            rule_row.addWidget(box, 1)
+        rule_add = Button("Add", "ghost")
+        rule_add.clicked.connect(self._add_rule)
+        rule_row.addWidget(rule_add)
+        rules.body().addLayout(rule_row)
+
+        self.rules_holder = QtWidgets.QWidget()
+        self.rules_holder.setStyleSheet("background:transparent;")
+        self.rules_list = QtWidgets.QVBoxLayout(self.rules_holder)
+        self.rules_list.setContentsMargins(0, 0, 0, 0)
+        self.rules_list.setSpacing(5)
+        rules.body().addWidget(self.rules_holder)
+
+        self.rules_empty = Label(
+            "Whole words, any capitalisation. Applied in order, after each "
+            "dictation.", 11, 400, INK_SOFT)
+        self.rules_empty.setWordWrap(True)
+        rules.body().addWidget(self.rules_empty)
+        lay.addWidget(rules)
+
         lay.addStretch(1)
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll_area(inner))
         self.reload_words()
+        self.reload_rules()
 
     # ── actions ─────────────────────────────────────────────────────────────
 
     def _save_language(self) -> None:
-        cfg = core.load_config()
-        cfg["language"] = self.lang.currentData() or ""
-        core.save_config(cfg)
+        # set_language rather than a plain save: it also keeps the recently
+        # used list the tray menu offers, so a language chosen here is in the
+        # quick menu next time without being configured twice.
+        core.set_language(self.lang.currentData() or "")
         self.changed.emit()
+
+    def refresh_language(self) -> None:
+        """Re-read the setting, for when it was changed from the tray menu."""
+        saved = core.load_config().get("language") or ""
+        for i in range(self.lang.count()):
+            if self.lang.itemData(i) == saved:
+                self.lang.blockSignals(True)
+                self.lang.setCurrentIndex(i)
+                self.lang.blockSignals(False)
+                return
 
     def _add(self) -> None:
         word = self.entry.text().strip()
@@ -946,6 +1079,52 @@ class LanguagePage(QtWidgets.QWidget):
         self.chips_holder.setVisible(bool(words))
         self.empty.setVisible(not words)
 
+        self._set_count(words)
+
+    # ── corrections ─────────────────────────────────────────────────────────
+
+    def _add_rule(self) -> None:
+        find = self.rule_find.text().strip()
+        into = self.rule_into.text().strip()
+        if not find:
+            return
+        # Replacing a word with exactly itself is the one rule guaranteed to do
+        # nothing. Compared case-sensitively on purpose: "github" to "GitHub"
+        # differs only in case and is the most useful rule on the page.
+        if find == into:
+            self.rule_find.clear()
+            self.rule_into.clear()
+            return
+        rules = [r for r in core.replacements() if r[0].lower() != find.lower()]
+        rules.append((find, into))
+        self._store_rules(rules)
+        self.rule_find.clear()
+        self.rule_into.clear()
+        self.rule_find.setFocus()
+
+    def _remove_rule(self, find: str) -> None:
+        self._store_rules([r for r in core.replacements() if r[0] != find])
+
+    def _store_rules(self, rules: list) -> None:
+        cfg = core.load_config()
+        cfg["replacements"] = [[f, t] for f, t in rules]
+        core.save_config(cfg)
+        self.reload_rules()
+
+    def reload_rules(self) -> None:
+        while self.rules_list.count():
+            item = self.rules_list.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        rules = core.replacements()
+        for find, into in rules:
+            row = RuleRow(find, into)
+            row.removed.connect(self._remove_rule)
+            self.rules_list.addWidget(row)
+        self.rules_holder.setVisible(bool(rules))
+
+    def _set_count(self, words: list) -> None:
         advised = core.VOCABULARY_ADVISED
         if not words:
             self.count_label.setText("")
@@ -1199,23 +1378,52 @@ class SpeedPage(QtWidgets.QWidget):
 # ── history ────────────────────────────────────────────────────────────────
 
 class HistoryEntry(Card):
+    """One transcript, with a way to copy it and - if it is the newest one and
+    a better model exists - a way to have it heard again."""
+
+    redo = QtCore.Signal()
+
     def __init__(self, text: str, meta: str, stamp: str) -> None:
         super().__init__(padding=15)
+        self.text = text
         top = QtWidgets.QHBoxLayout()
         top.addWidget(Label(stamp, 10, 600, INK_SOFT))
         top.addStretch(1)
-        copy = Button("Copy", "quiet")
-        copy.clicked.connect(lambda: core.clipboard_set(text))
-        top.addWidget(copy)
+        self.redo_btn = Button("Redo", "quiet")
+        self.redo_btn.clicked.connect(self.redo.emit)
+        self.redo_btn.hide()
+        top.addWidget(self.redo_btn)
+        self.copy_btn = Button("Copy", "quiet")
+        self.copy_btn.clicked.connect(lambda: core.clipboard_set(self.text))
+        top.addWidget(self.copy_btn)
         self.body().addLayout(top)
 
-        body = Label(text, 12.5, 400, INK)
-        body.setWordWrap(True)
-        self.body().addWidget(body)
-        self.body().addWidget(Label(meta, 10, 400, INK_SOFT))
+        self.body_label = Label(text, 12.5, 400, INK)
+        self.body_label.setWordWrap(True)
+        self.body().addWidget(self.body_label)
+        self.meta_label = Label(meta, 10, 400, INK_SOFT)
+        self.body().addWidget(self.meta_label)
+
+    def set_text(self, text: str, meta: str) -> None:
+        self.text = text
+        self.body_label.setText(text)
+        self.meta_label.setText(meta)
+
+    def offer_redo(self, model: str | None) -> None:
+        self.redo_btn.setText(f"Redo with {model}" if model else "Redo")
+        self.redo_btn.setEnabled(True)
+        self.redo_btn.setVisible(bool(model))
+
+    def redo_running(self, model: str) -> None:
+        self.redo_btn.setText(f"Listening again with {model} ...")
+        self.redo_btn.setEnabled(False)
 
 
 class HistoryPage(QtWidgets.QWidget):
+    """What was dictated, this session or since the setting was turned on."""
+
+    redo_requested = QtCore.Signal()
+
     def __init__(self) -> None:
         super().__init__()
         self._inner = QtWidgets.QWidget()
@@ -1223,8 +1431,35 @@ class HistoryPage(QtWidgets.QWidget):
         self._lay.setContentsMargins(30, 26, 30, 30)
         self._lay.setSpacing(12)
 
-        self._lay.addWidget(Label("Kept until you quit. Never written to disk.",
-                                  11, 400, INK_SOFT))
+        # The setting sits on the page it governs rather than under Sound.
+        # Someone deciding whether their words should be written to disk is
+        # looking at their words when the question occurs to them.
+        head = Card(padding=15)
+        hrow = QtWidgets.QHBoxLayout()
+        self.keep = QtWidgets.QCheckBox("Keep these after Murmur closes")
+        self.keep.setFont(font(11.5))
+        self.keep.setStyleSheet(f"""
+            QCheckBox {{ color:{INK}; background:transparent; spacing:9px; }}
+            QCheckBox::indicator {{ width:17px; height:17px; }}
+            QCheckBox::indicator:unchecked {{
+                border:1.5px solid #C6C6CE; border-radius:5px;
+                background:{SURFACE}; }}
+            QCheckBox::indicator:checked {{
+                border:1.5px solid {ACCENT}; border-radius:5px;
+                background:{ACCENT}; }}
+        """)
+        self.keep.setChecked(history.enabled())
+        self.keep.toggled.connect(self._set_keep)
+        hrow.addWidget(self.keep)
+        hrow.addStretch(1)
+        self.clear_btn = Button("Clear", "quiet")
+        self.clear_btn.clicked.connect(self._clear)
+        hrow.addWidget(self.clear_btn)
+        head.body().addLayout(hrow)
+        self.note = Label("", 10.5, 400, INK_SOFT)
+        self.note.setWordWrap(True)
+        head.body().addWidget(self.note)
+        self._lay.addWidget(head)
 
         self.empty = Card(padding=30)
         e = QtWidgets.QVBoxLayout()
@@ -1239,10 +1474,95 @@ class HistoryPage(QtWidgets.QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll_area(self._inner))
 
-    def add(self, text: str, meta: str) -> None:
+        self._latest: HistoryEntry | None = None
+        self._entries: list[HistoryEntry] = []
+        self._restore()
+        self._refresh_note()
+
+    # ── the list ────────────────────────────────────────────────────────────
+
+    def _restore(self) -> None:
+        """Put saved transcripts back on the page, oldest inserted first so the
+        newest ends up on top exactly as a live one would."""
+        for saved in reversed(history.load()):
+            self._insert(saved.get("text", ""), saved.get("meta", ""),
+                         saved.get("stamp", ""), latest=False)
+
+    def _insert(self, text: str, meta: str, stamp: str,
+                latest: bool = True) -> HistoryEntry:
         self.empty.hide()
-        entry = HistoryEntry(text, meta, time.strftime("%H:%M:%S"))
+        entry = HistoryEntry(text, meta, stamp)
+        entry.redo.connect(self.redo_requested.emit)
         self._lay.insertWidget(1, entry)
+        self._entries.insert(0, entry)
+        if latest:
+            self._latest = entry
+        return entry
+
+    def add(self, text: str, meta: str) -> None:
+        # Only one card may offer a retry, and it is this one from now on.
+        if self._latest is not None:
+            self._latest.redo_btn.hide()
+        self._insert(text, meta, time.strftime("%H:%M:%S"))
+
+    def offer_redo(self, model: str | None) -> None:
+        if self._latest is not None:
+            self._latest.offer_redo(model)
+
+    def redo_started(self, model: str) -> None:
+        if self._latest is not None:
+            self._latest.redo_running(model)
+
+    def redo_finished(self) -> None:
+        if self._latest is not None:
+            self._latest.offer_redo(core.better_model())
+
+    def replace_latest(self, text: str, meta: str) -> None:
+        if self._latest is not None:
+            self._latest.set_text(text, meta)
+            # The clip has now been through the better model. Offering the same
+            # retry again would only spend another minute reaching the same
+            # answer.
+            self._latest.redo_btn.hide()
+
+    # ── the setting ─────────────────────────────────────────────────────────
+
+    def _set_keep(self, on: bool) -> None:
+        cfg = core.load_config()
+        cfg["keep_history"] = on
+        core.save_config(cfg)
+        if on:
+            # Everything already on screen predates the setting. Writing it out
+            # now is what someone ticking the box means, and losing this
+            # session's transcripts to a setting meant to preserve them would
+            # be a strange way to start.
+            for entry in reversed(self._entries):
+                history.add(entry.text, entry.meta_label.text())
+        else:
+            history.clear()
+        self._refresh_note()
+
+    def _clear(self) -> None:
+        answer = QtWidgets.QMessageBox.question(
+            self, "Murmur",
+            "Clear the history?\n\nThe transcripts on this page are removed, "
+            "and the saved file with them.")
+        if answer != QtWidgets.QMessageBox.Yes:
+            return
+        history.clear()
+        for entry in self._entries:
+            entry.setParent(None)
+            entry.deleteLater()
+        self._entries.clear()
+        self._latest = None
+        self.empty.show()
+        self._refresh_note()
+
+    def _refresh_note(self) -> None:
+        self.note.setText(
+            "Saved on this computer, in Murmur's own folder. Nothing is sent "
+            "anywhere." if self.keep.isChecked() else
+            "Kept until you quit. Never written to disk.")
 
 
 # ── shell ──────────────────────────────────────────────────────────────────
@@ -1400,6 +1720,11 @@ class MainWindow(QtWidgets.QMainWindow):
             f"QStatusBar{{background:{SURFACE};border-top:1px solid {LINE};"
             f"padding:3px 12px;}} QStatusBar::item{{border:none;}}")
         self.refresh_side_note()
+
+    def show_page(self, name: str) -> None:
+        """Bring a named page to the front, for links from outside the window."""
+        if name in self._titles:
+            self.nav.setCurrentRow(self._titles.index(name))
 
     def refresh_hotkey(self) -> None:
         """Push a changed shortcut everywhere it is shown."""

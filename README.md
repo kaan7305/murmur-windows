@@ -178,6 +178,13 @@ Naming the language is 2.6x faster, because the detection pass is skipped
 entirely. Getting it wrong is both far slower and worse. There is no case in
 which leaving it on automatic is the better option if you know what you speak.
 
+Which is why the language is also in the tray and pill menu, not only on the
+Language page. Advice to always name the language is worth nothing to someone
+who speaks two of them if naming it costs opening a window mid-sentence. The
+menu lists the languages actually dictated in, most recent first, and that list
+builds itself — the second time you choose Turkish it is one right-click away,
+and languages you never use never appear.
+
 ## Vocabulary
 
 Names, product names and jargon are the words a speech model cannot get from
@@ -198,6 +205,47 @@ said still will not appear.
 About sixty words fit in the window Whisper reserves for this. Past that,
 faster-whisper trims the list, so the interface says how many will fit rather
 than letting the extra entries do nothing silently.
+
+## Corrections
+
+Vocabulary leans on what the model *hears*. Corrections fix what it *writes*,
+which is a different problem: `github` comes out lowercase every time, and an
+address comes out as "kaan at gmail dot com". The model heard both perfectly
+well, so no amount of biasing the audio side changes either.
+
+A correction is a pair — what it writes, what you wanted — applied to the
+finished transcript, in order, so a later rule can act on what an earlier one
+produced. Matching is whole-word and ignores capitalisation, because the first
+rule anyone writes turns `at` into `@` and must not touch "attention".
+
+Two cases take the space in front with them. A replacement starting with
+punctuation is one: `comma` → `,` would otherwise give "hello , world". An
+empty replacement is the other, which is how filler words are dropped —
+without it, deleting the `um` from "I um think" leaves two spaces behind.
+
+Deliberately not regular expressions. The people who need this are fixing the
+spelling of their own surname, and a syntax error in a settings box that
+silently stopped all dictation would be a poor trade for power nobody asked
+for.
+
+## When it mishears
+
+`small` is fast enough to feel instant and wrong often enough to notice. Until
+now the only recourse was to say the whole thing again.
+
+The last clip stays in memory, so the newest card in History offers to run it
+through a larger model — whichever is already downloaded, so pressing it never
+starts a 3 GB download you did not ask for. English-only weights are skipped
+unless English is the named language, since distil-large-v3 would transcribe
+Turkish into fluent nonsense, which is the exact failure the retry exists to
+undo.
+
+The result is **not** pasted. The window dictated into a minute ago may be
+anything by now, and typing into whatever has focus is not a correction, it is
+a new problem. It replaces the text on the card and goes to the clipboard.
+
+One clip is kept, not a session's worth: this is a second chance, not a
+recording of your day.
 
 ## Choosing a microphone
 
@@ -230,12 +278,31 @@ dictated into. No transcript, and no text of any kind, is ever written there.
 minute. That figure is an assumption, not a measurement of you, which is why the
 caption says so on hover.
 
+The History page is the one exception, and it is off by default. Transcripts
+live in memory and are gone when Murmur quits unless *keep these after Murmur
+closes* is ticked, at which point they go to `history.json` beside the config —
+on this computer, sent nowhere, and emptied by the Clear button on the same
+page. Kept in its own file so that clearing your transcripts does not also
+throw away a year of counters.
+
+## Text size
+
+Every size in the interface is a number somebody chose while looking at their
+own screen. The Sound page multiplies all of them at once — window, tray menu
+and pill together — for when Murmur specifically is the thing you are leaning
+in to read. When *everything* is too small, Windows' own display scaling is the
+better answer and Murmur follows it already.
+
+It applies on restart. Qt copies a font into a widget when the widget is built,
+so changing it live would resize half the window and leave the rest, which
+looks like a fault rather than a setting.
+
 ## What lives where
 
 | Path | Holds |
 |---|---|
 | `%LOCALAPPDATA%\Programs\Murmur` | the program; removed by the uninstaller |
-| `%LOCALAPPDATA%\Murmur` | `config.json`, `stats.json`, the log, the GPU pack |
+| `%LOCALAPPDATA%\Murmur` | `config.json`, `stats.json`, `history.json` if kept, the log, the GPU pack |
 | `~\.cache\huggingface\hub` | the speech models |
 
 Nothing mutable sits next to the executable, so a standard user can change

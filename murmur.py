@@ -13,8 +13,10 @@ from __future__ import annotations
 import argparse
 import ctypes
 import ctypes.wintypes as wt
+import functools
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -305,6 +307,31 @@ def resolve_model() -> str:
     return os.environ.get("MURMUR_MODEL") or load_config().get("model") or MODEL
 
 
+def better_model(current: str | None = None) -> str | None:
+    """The model worth retrying a misheard dictation with, or None.
+
+    Bigger, in the order the models are listed, which is the order they get
+    slower and more accurate in. A model already on disk is preferred over a
+    better one that is not, because "redo this" should not mean "download 3 GB
+    first" unless there is nothing else to offer.
+
+    English-only weights are skipped unless English is the named language.
+    distil-large-v3 is more accurate than small at everything except the one
+    thing that matters here - it would transcribe Turkish into confident
+    nonsense, which is exactly the failure the retry exists to fix.
+    """
+    current = current or resolve_model()
+    names = list(MODELS)
+    candidates = names[names.index(current) + 1:] if current in names else names
+    if resolve_language() != "en":
+        candidates = [n for n in candidates
+                      if "English" not in MODELS[n].get("lang", "")]
+    if not candidates:
+        return None
+    downloaded = [n for n in candidates if is_downloaded(n)]
+    return downloaded[-1] if downloaded else candidates[-1]
+
+
 # ── language ───────────────────────────────────────────────────────────────
 # Whisper knows a hundred languages and will guess which one it is hearing.
 # On a dictation-length clip that guess is unreliable: there is not much audio
@@ -349,6 +376,43 @@ def resolve_language():
     return load_config().get("language") or LANGUAGE
 
 
+#: How many languages the quick menu offers before it is just the full list
+#: again. Four covers everyone who switches; a longer menu is a worse menu.
+QUICK_LANGUAGES = 4
+
+
+def recent_languages() -> list:
+    """Language codes most recently dictated in, newest first.
+
+    Kept so the menu can offer the two or three languages someone actually
+    speaks without asking them to configure a list. Naming the language is
+    2.6x faster than letting the model detect it and far more accurate, but
+    only if changing it does not mean opening a window mid-sentence.
+    """
+    saved = load_config().get("recent_languages") or []
+    out = []
+    for code in saved:
+        if isinstance(code, str) and code and code not in out:
+            out.append(code)
+    return out[:QUICK_LANGUAGES]
+
+
+def set_language(code: str | None) -> None:
+    """Switch the spoken language and remember it as recently used.
+
+    Detect-automatically is stored as the setting but never enters the recent
+    list: it is not a language, and a menu offering it twice is a menu that
+    looks broken.
+    """
+    code = code or ""
+    cfg = load_config()
+    cfg["language"] = code
+    if code:
+        recent = [c for c in recent_languages() if c != code]
+        cfg["recent_languages"] = [code] + recent[:QUICK_LANGUAGES - 1]
+    save_config(cfg)
+
+
 def language_name(code) -> str:
     if not code:
         return "Detect automatically"
@@ -386,6 +450,84 @@ def hotwords():
 #: Half of 224 tokens, and a proper noun is rarely one token, so this is a
 #: deliberately conservative figure to advise people with.
 VOCABULARY_ADVISED = 60
+
+
+# ── output rules ───────────────────────────────────────────────────────────
+# Vocabulary biases what the decoder hears. This fixes what it writes, which
+# is a different problem: "github" comes out lowercase every time, an address
+# comes out as "kaan at gmail dot com", and no amount of biasing the audio
+# side changes either, because the model heard those perfectly well.
+#
+# A rule is a pair - what it writes, what you wanted - applied to the finished
+# transcript. Deliberately not regular expressions: the people who need this
+# are fixing the spelling of their own surname, and a syntax error in a
+# settings box that silently stops all dictation would be a poor trade for
+# power nobody asked for.
+
+
+def replacements() -> list:
+    """The output rules, as (find, replace) pairs."""
+    raw = load_config().get("replacements") or []
+    out = []
+    for item in raw:
+        # Stored as two-element lists because JSON has no tuples. Anything
+        # else in the file is somebody's hand edit, and skipping it beats
+        # taking the whole config down over one malformed row.
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            find, into = str(item[0]).strip(), str(item[1])
+            if find:
+                out.append((find, into))
+    return out
+
+
+#: Characters that belong tight against the word in front of them. A phrase
+#: spoken aloud carries a space before it - "kaan at gmail dot com", "hello
+#: comma world" - and replacing only the phrase leaves that space stranded:
+#: "kaan @gmail.com", "hello , world". These are the replacements where the
+#: space was part of what was being said.
+ATTACHING = ",.!?;:)]}%@"
+
+
+@functools.lru_cache(maxsize=256)
+def _rule_pattern(find: str, eat_space: bool = False):
+    """Whole-word, case-insensitive.
+
+    Whole-word because a rule turning "at" into "@" must not touch "attention",
+    and that is the first rule anyone writes. The boundaries are only applied
+    at ends that are actually word characters, since \\b next to punctuation
+    means the opposite of what it looks like and would stop a rule for "..."
+    from ever matching.
+
+    eat_space extends the match backwards over the space in front, for the
+    replacements that should sit against the previous word rather than after
+    a gap. It cannot swallow a word: the boundary still has to hold, so a rule
+    for "at" matches " at" and never "kaanat".
+    """
+    left = r"\b" if find[:1].isalnum() else ""
+    right = r"\b" if find[-1:].isalnum() else ""
+    lead = r"[ \t]*" if eat_space else ""
+    return re.compile(lead + left + re.escape(find) + right, re.IGNORECASE)
+
+
+def apply_rules(text: str) -> str:
+    """Run the output rules over a finished transcript.
+
+    Rules are applied in order and to the result of the previous one, so a
+    later rule can act on what an earlier one produced. That is worth knowing
+    when writing them and is why the interface keeps them in a visible order
+    rather than a set.
+    """
+    for find, into in replacements():
+        # Deleting a word takes the space with it, or "I um think" becomes
+        # "I  think"; punctuation takes it for the reason above.
+        eat_space = not into or into[0] in ATTACHING
+        # A function as the replacement, not a string: re.sub reads \1 and \g
+        # in a string replacement as group references, so a rule replacing
+        # something with "\1" would raise mid-dictation. Returning the text
+        # from a callable makes it literal, which is the only thing a rule
+        # here is ever meant to be.
+        text = _rule_pattern(find, eat_space).sub(lambda _m, r=into: r, text)
+    return text
 
 
 # ── the microphone ─────────────────────────────────────────────────────────
@@ -657,8 +799,9 @@ def paste(text: str) -> None:
         kb.release(_KEYS[m])
 
     # Give the target app a moment to actually read the clipboard before we
-    # put the old contents back.
-    if previous is not None:
+    # put the old contents back. The Sound page can turn this off, for anyone
+    # who would rather the dictation stayed on the clipboard to paste again.
+    if previous is not None and load_config().get("restore_clip", True):
         time.sleep(0.35)
         clipboard_set(previous)
 
@@ -741,7 +884,9 @@ def transcribe(model, audio: np.ndarray) -> str:
         vad_parameters={"min_silence_duration_ms": 300},
         condition_on_previous_text=False,
     )
-    return " ".join(s.text.strip() for s in segments).strip()
+    # Rules run here rather than at the paste, so the --file path, the setup
+    # guide and the history all see the same text the window would have got.
+    return apply_rules(" ".join(s.text.strip() for s in segments).strip())
 
 
 def _sample_clip() -> np.ndarray | None:

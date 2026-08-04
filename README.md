@@ -430,9 +430,10 @@ always said.
 MIT covers the code and the prose, not everything the files contain. The
 website reproduces the logos and window furniture of around forty products to
 show where Murmur types; those marks belong to their owners, and copying this
-repository conveys no right to them. The hero photograph is not Murmur's work
-either. And the optional GPU pack is NVIDIA's proprietary CUDA, cuBLAS and cuDNN
-libraries — which is why it is neither in this repository nor in the installer,
-and why it is fetched separately. `THIRD-PARTY-NOTICES.md` sets out all three
+repository conveys no right to them. And the optional GPU pack is NVIDIA's
+proprietary CUDA, cuBLAS and cuDNN libraries — which is why it is neither in
+this repository nor in the installer, and why it is fetched separately. The
+image at the top of the website was generated with an AI model rather than
+photographed; nobody real is in it. `THIRD-PARTY-NOTICES.md` sets out both
 carve-outs and what NVIDIA's terms permit. Fork the code freely; replace the
 artwork.

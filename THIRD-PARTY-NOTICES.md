@@ -150,15 +150,19 @@ page fetches it from Google Fonts at load time, which is a request to a third
 party that a privacy-minded reader may reasonably want to know about, and the
 only such request the page makes.
 
-The hero photograph at `site/assets/speaker.jpg` is not Murmur's own work and is
-not covered by the MIT grant. See *Scope* below.
+The hero image at `site/assets/speaker.jpg` was generated with an AI image model
+by the author. It is not a photograph, and nobody real is depicted in it, so
+there is no photographer and no subject to credit. Worth knowing if you fork
+this: a purely machine-generated image may not attract copyright at all in some
+jurisdictions, so treat the MIT grant over that one file as saying "do what you
+like with it" rather than as a transfer of rights anyone could enforce.
 
 ## Scope of the MIT licence
 
 MIT covers the source of this application and of its website: the Python, the
 markup, the stylesheet, the drawn Murmur mark in `logo.py`, and the prose.
 
-It does not, and cannot, cover three things that live inside those files:
+It does not, and cannot, cover two things that live inside those files:
 
 1. **Third-party logos and trade dress.** `site/index.html` reproduces the marks
    of around forty products as inline SVG geometry — in the keyboard, in the
@@ -167,8 +171,7 @@ It does not, and cannot, cover three things that live inside those files:
    Microsoft OneNote, Google Chrome, Windows Terminal and the Windows 11
    taskbar, rendered in CSS. Those marks belong to their owners. Copying this
    repository does not convey any right to them.
-2. **The hero photograph**, `site/assets/speaker.jpg`.
-3. **The NVIDIA libraries** in the optional GPU pack, which are proprietary and
+2. **The NVIDIA libraries** in the optional GPU pack, which are proprietary and
    are covered by the section above. They are deliberately absent from this
    repository and from the installer.
 

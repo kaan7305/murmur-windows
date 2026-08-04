@@ -8,9 +8,17 @@ some of it. The default list is what survived being removed one at a time and
 re-tested; --full is the escape hatch if a card turns out to need something this
 machine did not.
 
-The result is dist/Murmur-GPU-Pack.zip. It is not compressed further than the
-DLLs already are - they are mostly incompressible machine code, and ZIP_DEFLATE
-on 1.6 GB costs minutes to save a few percent.
+The result is dist/Murmur-GPU-Pack.zip, holding the libraries under bin/ and
+each wheel's licence under licenses/. It is not compressed further than the DLLs
+already are - they are mostly incompressible machine code, and ZIP_DEFLATE on
+1.6 GB costs minutes to save a few percent.
+
+Everything in bin/ is NVIDIA's, proprietary, and redistributed unmodified under
+terms that permit it only as part of an application and forbid stripping the
+notices. That is why the licences are packed too, why gpupack.install() keeps
+them, and why the pack is an accessory to Murmur rather than a download offered
+on its own. See THIRD-PARTY-NOTICES.md, which also records what is unresolved
+about the cuDNN file list.
 """
 from __future__ import annotations
 
@@ -39,6 +47,32 @@ def source_dirs() -> list[pathlib.Path]:
     return [d for r in roots for d in r.glob("*/bin") if d.is_dir()]
 
 
+def license_files() -> dict[str, pathlib.Path]:
+    """Each NVIDIA wheel's License.txt, keyed by the distribution it came from.
+
+    These libraries are proprietary. NVIDIA's terms permit redistributing them
+    inside an application but forbid removing their notices, and the licence
+    text lives in the wheel's .dist-info rather than next to the DLLs - so a
+    pack built from `nvidia/*/bin` alone strips it, which is what this one did
+    until now. Packing without them is refused rather than warned about,
+    because a warning is a thing you scroll past.
+    """
+    roots = [pathlib.Path(p) for p in site.getsitepackages()]
+    roots.append(pathlib.Path(__file__).parent / ".venv" / "Lib"
+                 / "site-packages")
+
+    found: dict[str, pathlib.Path] = {}
+    for root in roots:
+        for info in sorted(root.glob("nvidia_*.dist-info")):
+            for rel in ("licenses/License.txt", "License.txt", "LICENSE"):
+                src = info / rel
+                if src.is_file():
+                    # nvidia_cublas_cu12-12.9.2.10.dist-info -> nvidia_cublas_cu12
+                    found.setdefault(info.name.split("-")[0], src)
+                    break
+    return found
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--full", action="store_true",
@@ -60,6 +94,14 @@ def main() -> int:
                 continue
             files.setdefault(dll.name, dll)   # first directory wins
 
+    licences = license_files()
+    if not licences:
+        print("No NVIDIA License.txt found in any nvidia_*.dist-info.\n"
+              "Refusing to build a pack that would ship their libraries with "
+              "their licence stripped. Reinstall the wheels with pip so the\n"
+              "dist-info directories are present.")
+        return 1
+
     out = pathlib.Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -69,7 +111,11 @@ def main() -> int:
         for name, src in sorted(files.items()):
             print(f"  {src.stat().st_size / 1024**2:8.1f} MB  {name}")
             z.write(src, f"bin/{name}")
+        for dist, src in sorted(licences.items()):
+            z.write(src, f"licenses/{dist}/License.txt")
 
+    print(f"\n  + {len(licences)} licence file(s): "
+          + ", ".join(sorted(licences)))
     print(f"\n  -> {out}  ({out.stat().st_size / 1024**3:.2f} GB)")
     if not args.full:
         print(f"     {len(SKIP)} libraries left out; --full includes them")

@@ -23,6 +23,12 @@ import paths
 # with no server at all.
 PACK_URL = ""
 
+# Where a person goes to fetch the archive by hand while PACK_URL is empty.
+# Telling someone to "point Murmur at Murmur-GPU-Pack.zip" is only useful if
+# they know where that file comes from; without this the button is a dead end
+# for anyone who did not build the pack themselves.
+PACK_PAGE = "https://github.com/kaan7305/murmur-windows/releases/latest"
+
 PACK_VERSION = "1"
 
 # The libraries CTranslate2 resolves by name at inference time. Checked after
@@ -98,6 +104,9 @@ def install(archive, progress=None) -> None:
     shutil.rmtree(binaries, ignore_errors=True)
     binaries.mkdir(parents=True, exist_ok=True)
 
+    docs = target / "licenses"
+    shutil.rmtree(docs, ignore_errors=True)
+
     try:
         with zipfile.ZipFile(archive) as z:
             members = [m for m in z.infolist()
@@ -113,12 +122,35 @@ def install(archive, progress=None) -> None:
                     shutil.copyfileobj(src, dst, 1024 * 1024)
                 if progress:
                     progress(i, len(members))
+
+            # The licences travel with the libraries. These are NVIDIA's
+            # proprietary binaries and their terms forbid removing the notices,
+            # so an install that kept only the DLLs would be the one place the
+            # text got dropped. Not flattened - one directory per wheel, since
+            # cuDNN's agreement is a different document from the other two.
+            for m in z.infolist():
+                if m.is_dir() or not m.filename.lower().startswith("licenses/"):
+                    continue
+                parts = m.filename.split("/")[1:]
+                # An archive is untrusted input: the user picks the file, and a
+                # member named licenses/../../x escapes the directory. Skip a
+                # malformed name rather than strip the offending components,
+                # which would silently write a file the archive never named.
+                if not parts or any(p in ("", ".", "..") for p in parts):
+                    continue
+                if any("\\" in p or ":" in p for p in parts):
+                    continue
+                dest = docs.joinpath(*parts)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with z.open(m) as src, open(dest, "wb") as dst:
+                    shutil.copyfileobj(src, dst, 1024 * 1024)
     except zipfile.BadZipFile:
         raise PackError("That file is not a valid archive.")
 
     missing = [n for n in REQUIRED if not (binaries / n).is_file()]
     if missing:
         shutil.rmtree(binaries, ignore_errors=True)
+        shutil.rmtree(docs, ignore_errors=True)
         raise PackError("The pack is incomplete - missing "
                         + ", ".join(missing[:3]))
 

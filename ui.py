@@ -1280,7 +1280,13 @@ class SpeedPage(QtWidgets.QWidget):
                 self.install_btn.clicked.connect(lambda: self._install())
                 row.addWidget(self.install_btn)
             else:
-                self.install_btn = Button("Install the GPU pack", "primary")
+                # The file picker is useless to anyone who does not already
+                # have the archive, so the route to it comes first.
+                self.get_btn = Button("Download the pack", "ghost")
+                self.get_btn.clicked.connect(self._open_pack_page)
+                row.addWidget(self.get_btn)
+                self.install_btn = Button("Choose the downloaded file",
+                                          "primary")
                 self.install_btn.clicked.connect(
                     lambda: self._install(from_file=True))
                 row.addWidget(self.install_btn)
@@ -1296,7 +1302,8 @@ class SpeedPage(QtWidgets.QWidget):
             import gpupack
             return ("An NVIDIA card is here but the CUDA libraries are not. "
                     + ("About 1.6 GB to download." if gpupack.PACK_URL
-                       else "Point Murmur at Murmur-GPU-Pack.zip. 1.6 GB."))
+                       else "Download Murmur-GPU-Pack.zip from the releases "
+                            "page, then choose it here. 1.6 GB."))
         return "No NVIDIA card, so there is nothing to turn on."
 
     def _facts(self, state: str) -> QtWidgets.QWidget:
@@ -1320,6 +1327,15 @@ class SpeedPage(QtWidgets.QWidget):
         return card
 
     # ── actions ─────────────────────────────────────────────────────────────
+
+    def _open_pack_page(self) -> None:
+        """Open the page the archive is published on.
+
+        Only reachable while PACK_URL is empty, which is the case where the
+        person has to fetch 1.6 GB by hand and needs to be told where from.
+        """
+        import gpupack
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl(gpupack.PACK_PAGE))
 
     def _install(self, from_file: bool = False) -> None:
         import gpupack

@@ -1,9 +1,11 @@
 """Where Murmur keeps its files.
 
-An installed copy lives under Program Files, which a standard user cannot write
-to, so nothing mutable may sit beside the executable: config, logs and the
-optional GPU pack all go to LOCALAPPDATA. A source checkout uses the same
-layout, so there is one code path to reason about rather than two.
+An installed copy lives under Programs in LOCALAPPDATA, a directory the
+installer owns: an upgrade overwrites what it finds there and an uninstall
+removes it. So nothing mutable may sit beside the executable: config, logs and
+the optional GPU pack all go to the Murmur folder in LOCALAPPDATA. A source
+checkout uses the same layout, so there is one code path to reason about rather
+than two.
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ FROZEN = getattr(sys, "frozen", False)
 
 
 def app_dir() -> pathlib.Path:
-    """The directory the program was launched from - read-only once installed."""
+    """The directory the program was launched from - not ours to write to."""
     if FROZEN:
         return pathlib.Path(sys.executable).parent
     return pathlib.Path(__file__).resolve().parent

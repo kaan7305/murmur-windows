@@ -3,13 +3,54 @@
 Press a key, speak, and the text lands wherever your cursor already is.
 
 Everything runs on this machine. The audio never leaves it, there's no account,
-no API key, and no per-minute cost.
+no API key, and no per-minute cost. There is exactly one exception and it is
+worth being straight about: the first run downloads the speech model itself.
+After that you can pull the network cable out and never plug it back in.
+
+![Murmur's main window: a sidebar of Home, Models library, Language, Sound,
+Speed and History, and a Home page showing words-per-minute, words this week,
+and a checklist for getting started](docs/screenshot.png)
 
 ## Use it
 
-Install `Murmur-Setup-1.0.0.exe` and it appears in the Start menu. Nothing else
-is needed: no Python, no virtualenv, no administrator rights. It installs
-per-user into `%LOCALAPPDATA%\Programs\Murmur`.
+**[Download the installer](https://github.com/kaan7305/murmur-windows/releases/latest)**
+— `Murmur-Setup-1.0.0.exe`, 67 MB. It appears in the Start menu once installed.
+Nothing else is needed: no Python, no virtualenv, no administrator rights. It
+installs per-user into `%LOCALAPPDATA%\Programs\Murmur`.
+
+```
+SHA-256  fde5a556c1085aa11494b934dd0f75fa99237c38a155833eff63a10af3cbe4d2
+```
+
+### What it needs
+
+| | |
+|---|---|
+| Windows | 10 version 1809 or later, or Windows 11 |
+| Processor | 64-bit Intel or AMD. **Not ARM64** — see below |
+| Disk | about 1 GB: 200 MB for the app, 480 MB for the default model |
+| Network | once, on first run, to fetch the model. Never again |
+| Graphics card | optional. An NVIDIA card makes it faster; nothing needs one |
+
+ARM64 machines — Snapdragon X and the other Copilot+ laptops — are not
+supported. The frozen build would run under x64 emulation slowly enough to be
+worse than useless, so the installer declines rather than disappoint you. If
+that is your machine, running from source is the route that works today.
+
+**First run downloads about 480 MB**, the Small model, from Hugging Face. It
+happens once, in the background, and Murmur is unusable until it finishes, so
+start it before you need it rather than during a meeting.
+
+**Windows will warn you the first time.** The installer is not code-signed, so
+SmartScreen shows *"Windows protected your PC"* and hides the run button behind
+**More info → Run anyway**. That warning means "this file has no certificate and
+few people have downloaded it yet" — not "this file is malicious". A signing
+certificate costs a few hundred pounds a year, which is not something a free
+tool has, so the honest answer is to tell you rather than to hide it.
+
+If you would rather not take that on trust, don't: the whole program is in this
+repository, `build.bat` produces the installer from it, and running from source
+skips the installer altogether.
 
 To run from source instead:
 
@@ -31,6 +72,33 @@ it is stored in `config.json`.
 on it as well. Without that, Ctrl+Space starts dictating *and* opens autocomplete
 in every editor, and F9 dictates *and* toggles a breakpoint — which is why most
 dictation tools end up recommending a shortcut nobody would otherwise press.
+
+That cuts both ways, and there is one case where it will bite you. **If you type
+Chinese, Japanese or Korean, rebind the shortcut before anything else.**
+`Ctrl+Space` is the standard Windows IME on/off toggle, and Murmur swallowing it
+means you lose IME switching everywhere until you change it.
+
+## How it compares
+
+Windows already dictates, and there are other Whisper front-ends. Where Murmur
+is not the right answer:
+
+| | Use that instead when |
+|---|---|
+| **Win+H**, built into Windows | You are happy with it. It is already there, it is free, and it needs no install. On a Copilot+ machine it runs on the NPU and is fast. |
+| **Dragon** and other paid tools | You need voice *commands* and editing by voice, or a medical or legal vocabulary. Murmur only types what you say. |
+| **Other Whisper front-ends** | You are on macOS or Linux — Murmur is Windows-only — or you want a signed installer today. |
+
+Where Murmur is different: it works offline on an ordinary machine with no NPU
+and no Microsoft account; it swallows its own shortcut so the app underneath
+does not also act on it; it lets you pick the model, so you can trade speed
+against accuracy; and it pastes per-application, because the shortcut that
+pastes into a terminal is not the one that pastes into Word.
+
+Being straight about the rest: the installer is unsigned, there is no ARM64
+build, and while Whisper handles 99 languages the Small model that ships by
+default is noticeably weaker outside English — set a larger model if you dictate
+in another language.
 
 `hotkeys.py` does this with a low-level keyboard hook. pynput's own
 `GlobalHotKeys` cannot: it can suppress an event, but only from inside the hook
@@ -345,8 +413,26 @@ python selftest.py         clipboard, focus detection, audio, CUDA
 
 ## Licence
 
-Original work. Not derived from any other application's source.
+**MIT** — see `LICENSE`. Original work, not derived from any other
+application's source.
 
-Dependencies are permissively licensed: Whisper's weights are MIT,
-`faster-whisper` and CTranslate2 are MIT. Nothing here carries a copyleft
-obligation, so this can be relicensed or sold however you like.
+The dependencies are a mix, and two of them are copyleft: **PySide6 (Qt)** and
+**pynput** are both LGPL-3.0. That is *weak* copyleft — it attaches to those
+libraries, not to Murmur's code, and MIT is a normal licence to publish
+alongside them — but it is not nothing, and an earlier version of this section
+claimed there was no copyleft here at all. There is. `THIRD-PARTY-NOTICES.md`
+lists every component, what it is licensed under, whether it ships inside the
+installer, and what the LGPL actually asks of anyone redistributing the build.
+
+Whisper's weights, `faster-whisper` and CTranslate2 are MIT, as this section
+always said.
+
+MIT covers the code and the prose, not everything the files contain. The
+website reproduces the logos and window furniture of around forty products to
+show where Murmur types; those marks belong to their owners, and copying this
+repository conveys no right to them. The hero photograph is not Murmur's work
+either. And the optional GPU pack is NVIDIA's proprietary CUDA, cuBLAS and cuDNN
+libraries — which is why it is neither in this repository nor in the installer,
+and why it is fetched separately. `THIRD-PARTY-NOTICES.md` sets out all three
+carve-outs and what NVIDIA's terms permit. Fork the code freely; replace the
+artwork.

@@ -17,5 +17,10 @@ dist/
 murmur.ico
 
 # Scratch captures, kept out of the history because they are regenerated
-# whenever a screen changes and none of them is a source file.
+# whenever a screen changes and none of them is a source file. The leading
+# underscore is what marks a capture as scratch; the directory does not matter,
+# since this pattern is unanchored and so catches docs\_try.png too. Screenshots
+# the README publishes are the ones people see before installing anything, so
+# they are worth committing: _cap.ps1 defaults to docs\screenshot.png, a plain
+# name this rule leaves alone.
 _*.png

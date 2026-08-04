@@ -1,0 +1,92 @@
+# A form rather than a free-text template, because the four things that decide
+# whether a Murmur bug is reproducible - version, Windows build, hardware, and
+# whether the GPU pack is in play - are exactly the four people leave out.
+name: Bug report
+description: Something Murmur did wrong
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Not for security problems. Those go through the Security tab of this
+        repository, privately: see `SECURITY.md`.
+
+  - type: input
+    id: version
+    attributes:
+      label: Murmur version
+      description: >-
+        The installer you ran, for example Murmur-Setup-1.0.0.exe. Or
+        right-click Murmur.exe, Properties, Details, and read Product version.
+        Running from source, paste the output of `git rev-parse --short HEAD`.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and build
+      description: >-
+        Press Win+R, run `winver`, and copy the version and build. Some of this
+        depends on the exact build, so "Windows 11" on its own is not enough.
+      placeholder: "Windows 11 23H2, build 22631.4460"
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: CPU and GPU
+      description: >-
+        Task Manager, Performance tab, lists both. "No dedicated GPU" is a
+        useful answer rather than a missing one.
+      placeholder: "Ryzen 7 7840HS, RTX 4060 Laptop"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: gpu-pack
+    attributes:
+      label: Is the GPU pack installed?
+      description: >-
+        The Speed page shows Graphics acceleration as On once it is. On disk it
+        is %LOCALAPPDATA%\Murmur\gpu.
+      options:
+        - "No"
+        - "Yes"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: >-
+        What you did and what Murmur did. If it only happens while dictating
+        into one application, name that application.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: The end of the log
+      description: >-
+        The last 50 or so lines of %LOCALAPPDATA%\Murmur\murmur.log. Paste that
+        path into the Explorer address bar to open it, or run this in
+        PowerShell: Get-Content "$env:LOCALAPPDATA\Murmur\murmur.log" -Tail 50
+
+        The log holds startup and error output, not transcripts, but read it
+        before posting: file paths in it contain your Windows username.
+      render: text
+    validations:
+      required: true

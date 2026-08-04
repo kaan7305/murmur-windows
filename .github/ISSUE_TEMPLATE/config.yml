@@ -1,0 +1,13 @@
+# Blank issues stay ON until Discussions is switched on for this repository.
+# The link below 404s while Discussions is disabled, and funnelling every
+# question into a dead link with no other route in is worse than the occasional
+# issue that arrives without a log. Once Discussions is enabled
+# (Settings > General > Features), set this to false and the bug form becomes
+# the only way into the tracker, which is the intent.
+blank_issues_enabled: true
+contact_links:
+  - name: Question, idea, or "does this work with ..."
+    url: https://github.com/kaan7305/murmur-windows/discussions
+    about: >-
+      Setting something up, whether a device or application works, or a feature
+      you would like. Anything Murmur got wrong belongs in the bug form.

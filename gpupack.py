@@ -154,6 +154,20 @@ def install(archive, progress=None) -> None:
         raise PackError("The pack is incomplete - missing "
                         + ", ".join(missing[:3]))
 
+    # The same refusal make_gpu_pack.py makes when building, made again here.
+    # Hardening only the build side leaves the hole open: any pack produced
+    # before that check existed installs cleanly and writes NVIDIA's
+    # proprietary libraries to disk with their notices stripped, which is
+    # precisely what their terms forbid. An older pack is exactly the archive
+    # someone still has lying around, so this is the case that matters.
+    licences = [p for p in docs.rglob("*") if p.is_file()] if docs.is_dir() else []
+    if not licences:
+        shutil.rmtree(binaries, ignore_errors=True)
+        shutil.rmtree(docs, ignore_errors=True)
+        raise PackError("That pack carries no licence files. Rebuild it with "
+                        "make_gpu_pack.py - NVIDIA's libraries may not be "
+                        "redistributed with their notices removed.")
+
     paths.gpu_manifest().write_text(json.dumps({
         "version": PACK_VERSION,
         "files": len(members),

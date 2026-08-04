@@ -74,9 +74,9 @@ distributable portions of the SDK shall only be accessed by your application"
 (§1.1.2). Murmur appears to satisfy both — it is a dictation program, and the
 libraries are reached through the search-path entry it adds at startup. Note
 though that `murmur.py` also prepends the CUDA directories to the process `PATH`
-(line 128, because `add_dll_directory` alone is not enough), which child
-processes inherit; whether that remains consistent with "accessed only by your
-application" is a question for counsel, not one this file settles.
+(in `_register_cuda_dlls`, because `add_dll_directory` alone is not enough),
+which child processes inherit; whether that remains consistent with "accessed
+only by your application" is a question for counsel, not one this file settles.
 
 The CUDA agreement adds, at §1.2, that "you may not distribute or sublicense the
 SDK as a stand-alone product" — which is why the pack is an accessory to Murmur

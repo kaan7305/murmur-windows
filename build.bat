@@ -1,7 +1,7 @@
 @echo off
 REM Build Murmur for distribution. Produces, in dist\:
 REM
-REM   Murmur-Setup-1.0.0.exe   the installer people download  (~120 MB)
+REM   Murmur-Setup-1.0.0.exe   the installer people download  (~67 MB)
 REM   Murmur-GPU-Pack.zip      optional CUDA libraries        (~1.6 GB)
 REM
 REM   build.bat            installer only

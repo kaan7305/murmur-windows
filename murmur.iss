@@ -30,7 +30,18 @@ DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 DisableDirPage=auto
 PrivilegesRequired=lowest
-ArchitecturesAllowed=x64compatible
+
+; Both of these turn a machine away at install time rather than let Murmur fail
+; on it afterwards. 1809 is the floor for what Murmur freezes in - CPython 3.14
+; and Qt 6 both stop there - and murmur.spec freezes windowless, so on anything
+; older the process dies with no console and no window: nothing for the user to
+; report but "it does nothing".
+; x64os (spelled x64 before Inno 6.3) rather than x64compatible: the latter also
+; matches ARM64 Windows, which would install happily and then run the whole
+; transcription stack under x64 emulation, slowly enough to be useless. A
+; refusal here is kinder than a first recording that never finishes.
+MinVersion=10.0.17763
+ArchitecturesAllowed=x64os
 ArchitecturesInstallIn64BitMode=x64compatible
 
 OutputDir=dist
@@ -76,6 +87,18 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     ValueType: string; ValueName: "Murmur"; \
     ValueData: """{app}\{#AppExe}"" --hidden"; \
     Flags: uninsdeletevalue; Tasks: startup
+
+; The entry above is only written when the task was ticked, and its
+; uninsdeletevalue only counts for the same run. Someone who declined it and
+; later turned the setting on inside Murmur (startup.py writes this very value)
+; would be left, after an uninstall, with a Run entry aimed at an exe that is no
+; longer there: a failed launch at every sign-in, forever. This second entry
+; creates nothing (ValueType none writes no value, dontcreatekey stops it even
+; creating the Run key) and exists only to have the value deleted at uninstall
+; however it came to be there.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
+    ValueType: none; ValueName: "Murmur"; \
+    Flags: dontcreatekey uninsdeletevalue
 
 [UninstallDelete]
 ; Inno removes only the shortcuts it created itself, and a desktop icon can

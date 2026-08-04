@@ -30,7 +30,7 @@ body:
       description: >-
         Press Win+R, run `winver`, and copy the version and build. Some of this
         depends on the exact build, so "Windows 11" on its own is not enough.
-      placeholder: "Windows 11 23H2, build 22631.4460"
+      placeholder: "Windows 11 24H2, build 26100.1742"
     validations:
       required: true
 
@@ -41,7 +41,7 @@ body:
       description: >-
         Task Manager, Performance tab, lists both. "No dedicated GPU" is a
         useful answer rather than a missing one.
-      placeholder: "Ryzen 7 7840HS, RTX 4060 Laptop"
+      placeholder: "Intel Core i7-12700H, NVIDIA GeForce RTX 3050 Laptop"
     validations:
       required: true
 

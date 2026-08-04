@@ -1,5 +1,10 @@
 """Stand a stub in for PyAV, which this build does not ship.
 
+The module being stubbed is PyAV (https://pyav.org), the Python bindings to
+FFmpeg's libav* libraries, which imports under the name "av". That "av" is
+audio/video, and this file has nothing whatever to do with antivirus - Murmur
+disables no scanner and asks for no exclusion.
+
 faster-whisper imports PyAV at the top of its audio module to decode audio
 *files*. Murmur never gives it one: the microphone produces a numpy array and
 the --file path is read with the standard library's wave module, so transcribe()
@@ -26,8 +31,8 @@ if "av" not in sys.modules:
             raise AttributeError(name)
         raise RuntimeError(
             f"PyAV was excluded from this build, so av.{name} does not exist "
-            f"(see rthook_no_av.py). Audio has to be passed to transcribe() as "
-            f"a numpy array rather than as a file."
+            f"(see rthook_no_pyav.py). Audio has to be passed to transcribe() "
+            f"as a numpy array rather than as a file."
         )
 
     _stub.__getattr__ = _unavailable

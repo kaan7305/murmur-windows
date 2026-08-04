@@ -48,7 +48,7 @@ excludes = [
     "tkinter", "matplotlib", "PIL", "scipy", "pandas", "IPython", "notebook",
     "pytest", "setuptools", "pip", "torch", "transformers",
     # PyAV decodes audio files, which Murmur never asks it to do. See
-    # rthook_no_av.py, which supplies the stub its importer expects.
+    # rthook_no_pyav.py, which supplies the stub its importer expects.
     "av",
     # The Xet transfer backend, which murmur.py disables at import time in
     # favour of the classic CDN.
@@ -64,7 +64,7 @@ a = Analysis(
                                    "murmur", "gpupack", "hotkeys",
                                    "onboarding", "startup", "history"],
     excludes=excludes,
-    runtime_hooks=["rthook_no_av.py"],
+    runtime_hooks=["rthook_no_pyav.py"],
     noarchive=False,
 )
 

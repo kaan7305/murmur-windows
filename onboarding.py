@@ -414,9 +414,47 @@ class MicStep(Step):
         self.note.setAlignment(QtCore.Qt.AlignCenter)
         self.lay.addWidget(self.note)
 
+        # The screen where a blocked microphone does the most damage: the bars
+        # sit flat, and the guide has just promised they would move. Hidden
+        # unless Windows is actually in the way.
+        self._asked = False
+        self.privacy = DarkButton("Open microphone privacy settings", "muted")
+        self.privacy.clicked.connect(self._privacy)
+        self.privacy.hide()
+        self.lay.addWidget(self.privacy)
+
         go = DarkButton("Continue")
         go.clicked.connect(self.guide.next_step)
         self.lay.addWidget(go)
+
+    def _privacy(self) -> None:
+        """Open the Windows switch, then let the user prove it worked.
+
+        The second press is not decoration. Windows decides whether to hand
+        the microphone over when the stream is opened, so the meter already
+        running here stays flat even after the switch is flipped - and this
+        guide has no way back to a screen once it has been left. Reopening the
+        microphone and asking the registry again is the only way the fix shows
+        up where it was promised.
+        """
+        if self._asked:
+            self.guide.mic_test.emit(False)
+            self._check()
+            self.guide.mic_test.emit(True)
+            return
+        self._asked = True
+        self.privacy.setText("I've turned it on - check again")
+        self.guide.privacy_requested.emit()
+
+    def _check(self) -> None:
+        """What the note under the meter should say, and whether the way out
+        of a blocked microphone needs to be on screen."""
+        blocked = self.guide.mic_blocked()
+        self.privacy.setVisible(blocked)
+        self.note.setText(
+            "Windows is blocking microphone access - the bars stay flat until "
+            "it is switched on. This is not your microphone."
+            if blocked else "No movement? Pick a different input above.")
 
     def on_enter(self) -> None:
         self.device.clear()
@@ -431,7 +469,7 @@ class MicStep(Step):
                     self.device.addItem(d["name"])
         except Exception as e:
             self.device.addItem(f"No input devices found: {e}")
-        self.note.setText("No movement? Pick a different input above.")
+        self._check()
         self.guide.mic_test.emit(True)
 
     def on_leave(self) -> None:
@@ -579,6 +617,7 @@ class ShortcutStep(Step):
 class Onboarding(QtWidgets.QWidget):
     mic_test = QtCore.Signal(bool)
     hotkey_changed = QtCore.Signal(str)
+    privacy_requested = QtCore.Signal()
     completed = QtCore.Signal()
 
     def __init__(self) -> None:
@@ -589,6 +628,10 @@ class Onboarding(QtWidgets.QWidget):
         self.setMinimumSize(620, 700)
         self.setStyleSheet(f"background:{D_BG};")
         self.hint = ""
+        # Replaced by the application, which owns the registry read. The
+        # default answers "not blocked" so a guide built without one - a test,
+        # or any other caller - can never invent a microphone problem.
+        self.mic_blocked = lambda: False
 
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)

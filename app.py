@@ -85,6 +85,66 @@ def tray_icon(active: bool = False) -> QtGui.QIcon:
     return icon
 
 
+# ── the Windows microphone switch ──────────────────────────────────────────
+#
+# Windows can refuse the microphone without anything appearing to go wrong:
+# the stream opens, PortAudio reports no error, and every frame arrives as
+# digital silence. Murmur then says it heard nothing, and the user goes off to
+# test a microphone that was working the whole time. Naming the switch is the
+# entire fix, so it is worth a registry read to be able to name it.
+
+MIC_CONSENT = (r"Software\Microsoft\Windows\CurrentVersion"
+               r"\CapabilityAccessManager\ConsentStore\microphone")
+MIC_PRIVACY_URL = "ms-settings:privacy-microphone"
+# Short on purpose: this also goes through the recording pill, which is 560px
+# wide and does not wrap. The dialog underneath carries the long version.
+MIC_BLOCKED = ("Windows is blocking microphone access - "
+               "switch it on in Settings.")
+
+
+def _consent(path: str) -> str | None:
+    """The Value under one ConsentStore key, or None if it will not read."""
+    import winreg
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path) as key:
+            value, _kind = winreg.QueryValueEx(key, "Value")
+    except OSError:
+        return None
+    return value if isinstance(value, str) else None
+
+
+def microphone_blocked() -> bool:
+    """True only when Windows is definitely refusing microphone access.
+
+    Two keys, because they answer for different kinds of program. The parent
+    key is the master switch on the Microphone page; the NonPackaged subkey is
+    the one Windows applies to everything that did not come from the Store,
+    which is exactly what an installed Murmur.exe is. "Let desktop apps access
+    your microphone" writes the NonPackaged value and leaves the parent reading
+    Allow, so a check that only looked at the parent would miss the switch most
+    people actually turn off - and that is the switch governing a frozen build.
+
+    Anything that is not an explicit Deny counts as allowed: a key that is not
+    there, a registry that will not open, a value Windows has since renamed.
+    Erring the other way would send someone into privacy settings to fix a
+    microphone that was never blocked, which is worse than the vague message
+    this exists to replace.
+    """
+    try:
+        answers = (_consent(MIC_CONSENT),
+                   _consent(MIC_CONSENT + r"\NonPackaged"))
+    except Exception:
+        return False        # no winreg at all, so not this problem
+    return any(a is not None and a.strip().lower() == "deny" for a in answers)
+
+
+def open_microphone_privacy() -> None:
+    """Windows' own deep link, so this lands on the Microphone page itself
+    rather than on the front of Settings with a page left to go and find."""
+    QtGui.QDesktopServices.openUrl(QtCore.QUrl(MIC_PRIVACY_URL))
+
+
 class Bridge(QtCore.QObject):
     """Signals are the only sanctioned route from a worker into the interface."""
     level = QtCore.Signal(float)
@@ -106,6 +166,7 @@ class Murmur(QtCore.QObject):
         self.sessions = 0
         self.cancelled = False
         self._testing = False
+        self._privacy_offered = False
         self.guide = None            # the setup guide, built on first request
 
         self.window = MainWindow()
@@ -369,7 +430,12 @@ class Murmur(QtCore.QObject):
             self.guide = Onboarding()
             self.guide.mic_test.connect(self._mic_test)
             self.guide.hotkey_changed.connect(self._change_hotkey)
+            self.guide.privacy_requested.connect(open_microphone_privacy)
             self.guide.completed.connect(self._guide_done)
+            # Handed the check rather than importing it there: app.py is the
+            # program's entry point, so the guide importing it back by name
+            # would load and run a second copy of the whole module.
+            self.guide.mic_blocked = microphone_blocked
             self.bridge.level.connect(self.guide.push_level)
         self.guide.set_hint(
             "Ready when you are." if self.model is not None
@@ -435,7 +501,11 @@ class Murmur(QtCore.QObject):
             except Exception as e:
                 # A microphone that will not open is the one failure the pill
                 # cannot report, because there is nothing to show it over.
-                self.bridge.failed.emit(f"Could not open the microphone: {e}")
+                # When Windows is the one refusing, the PortAudio error names
+                # a host API and a device index, none of which is the cause.
+                self.bridge.failed.emit(
+                    MIC_BLOCKED if microphone_blocked()
+                    else f"Could not open the microphone: {e}")
                 return
             self._sync_pill()          # the full pill takes over from here
             self.overlay.show_centred()
@@ -522,6 +592,37 @@ class Murmur(QtCore.QObject):
         else:
             self.tray.showMessage("Murmur", message,
                                   QtWidgets.QSystemTrayIcon.Warning, 4000)
+        # Naming the cause is only half of it. The switch is in Windows, not
+        # in Murmur, so the fix has to be handed over rather than described.
+        if message == MIC_BLOCKED:
+            self._offer_privacy_fix()
+
+    def _offer_privacy_fix(self) -> None:
+        """A dialog, for the one failure that cannot be fixed from in here.
+
+        Once per run. It is a setting, not an event: someone who has said no,
+        or who has already gone and turned it on, does not want to be asked
+        again every time they press the shortcut.
+        """
+        if self._privacy_offered:
+            return
+        self._privacy_offered = True
+        box = QtWidgets.QMessageBox(self.window)
+        box.setWindowTitle("Murmur")
+        box.setIcon(QtWidgets.QMessageBox.Warning)
+        box.setText("Windows is not letting Murmur use the microphone.")
+        box.setInformativeText(
+            "Nothing is wrong with your microphone or with Murmur - Windows "
+            "handed over silence instead of sound.\n\n"
+            "On the Microphone page, turn on microphone access and "
+            '"Let desktop apps access your microphone". The second one is '
+            "the setting that covers Murmur.")
+        go = box.addButton("Open privacy settings",
+                           QtWidgets.QMessageBox.AcceptRole)
+        box.addButton("Not now", QtWidgets.QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is go:
+            open_microphone_privacy()
 
     # ── worker ──────────────────────────────────────────────────────────────
 
@@ -543,7 +644,13 @@ class Murmur(QtCore.QObject):
                 self.bridge.failed.emit(f"Transcription failed: {e}")
                 continue
             if not text:
-                self.bridge.failed.emit("Nothing heard - only silence.")
+                # Silence has two causes that want opposite answers: a
+                # microphone that heard nothing, and a Windows switch that
+                # never let it listen. Told the first when it is really the
+                # second, people blame their headset or the program.
+                self.bridge.failed.emit(
+                    MIC_BLOCKED if microphone_blocked()
+                    else "Nothing heard - only silence.")
                 core.beep("empty")
                 continue
             target = core.foreground_process() or "?"

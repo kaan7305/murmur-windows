@@ -34,6 +34,16 @@ echo [1/4] icon
 echo [2/4] freezing the application
 "%PY%" -m PyInstaller --noconfirm --clean murmur.spec || goto :fail
 
+REM The frozen build carries PySide6, shiboken6 and pynput, all LGPL-3.0, and
+REM section 4 of that licence wants a combined work to say so where whoever
+REM received it can find it. Until now the notices existed only in the
+REM repository, which is no use to the person who downloaded an installer and
+REM has never seen the repository. ISCC packs dist\Murmur\* wholesale, so
+REM dropping them here is enough to put them beside the executable. LICENSE
+REM gains a .txt so that double-clicking it on Windows opens something.
+copy /y LICENSE "dist\Murmur\LICENSE.txt" >nul || goto :fail
+copy /y THIRD-PARTY-NOTICES.md "dist\Murmur\THIRD-PARTY-NOTICES.md" >nul || goto :fail
+
 echo [3/4] checking the build actually runs
 del "%LOCALAPPDATA%\Murmur\selftest.txt" 2>nul
 "dist\Murmur\Murmur.exe" --selftest

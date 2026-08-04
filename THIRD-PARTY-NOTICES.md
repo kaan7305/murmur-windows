@@ -145,10 +145,12 @@ you: keep the LGPL components replaceable, and keep this file with it.
 ## The website
 
 `site/index.html` sets [Inter](https://rsms.me/inter/) (SIL Open Font License
-1.1, by Rasmus Andersson) as its interface face. The font is not embedded — the
-page fetches it from Google Fonts at load time, which is a request to a third
-party that a privacy-minded reader may reasonably want to know about, and the
-only such request the page makes.
+1.1, by Rasmus Andersson) as its interface face. The font is served from the
+site's own host: three subsets under `site/assets/fonts`, with the licence text
+sitting beside them, which is what OFL 1.1 asks of anyone redistributing the
+files. It used to be fetched from Google Fonts as the page loaded — the only
+request to a third party the page made, and an odd one to leave in a page whose
+argument is that nothing leaves your machine. It now makes none.
 
 The hero image at `site/assets/speaker.jpg` was generated with an AI image model
 by the author. It is not a photograph, and nobody real is depicted in it, so

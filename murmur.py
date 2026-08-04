@@ -861,8 +861,20 @@ def paste(text: str) -> None:
     *mods, final = combo.split("+")
 
     previous = clipboard_get()
-    restoring = previous is not None and load_config().get("restore_clip", True)
-    marks = NEVER_LEAVE_MACHINE + (KEEP_OUT_OF_HISTORY if restoring else ())
+
+    # Two questions that look like one. Whether to hide the dictation from the
+    # Win+V history depends only on the setting: someone who asked for it to
+    # stay on the clipboard wants to find it there afterwards. Whether there is
+    # anything to put back additionally needs the clipboard to have held
+    # something first. Folding them together meant that dictating with an empty
+    # clipboard - a fresh login, or straight after a reboot - silently dropped
+    # the history exclusion for a user who had never changed the setting.
+    keep_on_clipboard = not load_config().get("restore_clip", True)
+    restoring = previous is not None and not keep_on_clipboard
+
+    marks = NEVER_LEAVE_MACHINE
+    if not keep_on_clipboard:
+        marks += KEEP_OUT_OF_HISTORY
     if not clipboard_set(text, marks):
         print("  ! could not write to clipboard; is another app holding it?")
         return

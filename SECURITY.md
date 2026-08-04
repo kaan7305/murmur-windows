@@ -53,10 +53,16 @@ elevated window, so an unelevated Murmur cannot type into one.
 
 **The clipboard.** Pasting reads the current clipboard contents so they can be
 put back, replaces them with the transcript, and restores the original 1.5
-seconds later if nothing else has written to the clipboard meanwhile. The
-transcript is marked to stay out of clipboard history and the cloud clipboard.
-The restored contents are not re-marked, because they were never Murmur's to
-reclassify.
+seconds later if nothing else has written to the clipboard meanwhile.
+
+The transcript is always marked to stay off the cloud clipboard, which would
+otherwise sync it through Microsoft's servers to the user's other machines. It
+is additionally kept out of the local Win+V history whenever the restore is on,
+which is the default. Turning the restore off is a request to leave the
+dictation on the clipboard, and something left on the clipboard on purpose
+belongs in the history like anything else — so in that configuration the
+transcript is retained by Windows locally. The restored contents are never
+re-marked either way, because they were never Murmur's to reclassify.
 
 **A first-run download over HTTPS.** The speech model is fetched by
 `huggingface_hub` from `Systran/faster-whisper-<name>` on Hugging Face into

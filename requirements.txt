@@ -1,11 +1,18 @@
-# Everything a source checkout needs. setup.bat installs exactly this list and
-# nothing else, so a package missing from here is a fresh clone that does not
-# start - which is how PySide6 came to be absent from it for four releases.
+# Everything a source checkout needs to run. setup.bat installs exactly this
+# list and nothing else, so a package missing from here is a fresh clone that
+# does not start - which is how PySide6, imported since the first commit, came
+# to be absent from it right through the 1.0.0 release.
 faster-whisper>=1.2
 PySide6>=6.6
 sounddevice>=0.5
 numpy>=2.0
 pynput>=1.8
+
+# Needed only to build the installer, not to run from source. Listed anyway
+# because build.bat's second step of four is `python -m PyInstaller`, so a fresh
+# clone that ran setup.bat and then took the README up on building the installer
+# would stop there.
+pyinstaller>=6.0
 
 # Not listed on purpose: ctranslate2, huggingface_hub, tokenizers and
 # onnxruntime all arrive with faster-whisper. Pinning them here would mean

@@ -8,7 +8,7 @@ echo Installing dependencies (a few hundred MB)...
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt || goto :fail
 echo.
 echo Done. Run run.bat to start Murmur.
-echo The speech model downloads on first launch (about 3 GB, once).
+echo The speech model downloads on first launch (about 480 MB, once).
 pause
 exit /b 0
 

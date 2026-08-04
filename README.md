@@ -19,7 +19,7 @@ Nothing else is needed: no Python, no virtualenv, no administrator rights. It
 installs per-user into `%LOCALAPPDATA%\Programs\Murmur`.
 
 ```
-SHA-256  fde5a556c1085aa11494b934dd0f75fa99237c38a155833eff63a10af3cbe4d2
+SHA-256  c8e018fe8c2aa93f18c86b3836fe16cd6bf536acc75d9d6e22f16002b2d8b9db
 ```
 
 ### What it needs
@@ -28,7 +28,8 @@ SHA-256  fde5a556c1085aa11494b934dd0f75fa99237c38a155833eff63a10af3cbe4d2
 |---|---|
 | Windows | 10 version 1809 or later, or Windows 11 |
 | Processor | 64-bit Intel or AMD. **Not ARM64** — see below |
-| Disk | about 1 GB: 200 MB for the app, 480 MB for the default model |
+| Memory | 4 GB. The model is held in memory while Murmur runs, so Large v3 wants 8 GB |
+| Disk | about 1 GB: 260 MB for the app, 480 MB for the default model |
 | Network | once, on first run, to fetch the model. Never again |
 | Graphics card | optional. An NVIDIA card makes it faster; nothing needs one |
 
@@ -218,9 +219,13 @@ page inside the app installs the pack for whoever has a card to run it on. It
 unpacks to `%LOCALAPPDATA%\Murmur\gpu`, so it needs no administrator rights and
 survives reinstalling Murmur itself.
 
-To publish the pack rather than passing the zip around by hand, put the file
-somewhere and set `PACK_URL` at the top of `gpupack.py`; the app's file picker
-becomes a download button.
+`PACK_URL` at the top of `gpupack.py` ships empty, so the Speed page offers two
+buttons: *Download the pack*, which opens the releases page, and *Choose the
+downloaded file*, which asks for the zip on disk. A file picker on its own would
+be a dead end for anyone who does not already have the archive, which is why the
+way to get it comes first. Fill `PACK_URL` in once the file sits somewhere the
+app can fetch it from directly, and the main button downloads it in place,
+leaving *Install from a file* as the quieter route for whoever already has it.
 
 `make_gpu_pack.py` leaves out three libraries the wheels ship — `cudnn_adv`,
 the alternate NVRTC build and `nvblas`, together about 350 MB — because

@@ -660,6 +660,34 @@ def disk_used(name: str) -> float:
 CF_UNICODETEXT = 13
 GMEM_MOVEABLE = 0x0002
 
+#: How long to leave the dictation on the clipboard before putting the previous
+#: contents back. This is a race against the target application actually reading
+#: the clipboard, and there is no signal for "the paste happened" short of owning
+#: the clipboard and rendering it lazily. 0.35s was too tight: a loaded machine,
+#: an Electron window or an RDP session can take longer, and losing that race
+#: means the app pastes whatever the user copied *before* dictating. For anyone
+#: with a password manager open that is the worst thing this program could do.
+#: Nobody notices a clipboard restored a second later.
+RESTORE_DELAY = 1.5
+
+#: Windows reads these registered formats to decide what may be done with a
+#: clipboard entry. They are split because the two questions are not the same
+#: one.
+#:
+#: The cloud clipboard syncs between a user's machines through Microsoft's
+#: servers, so dictated text is always excluded from it: a program whose whole
+#: claim is that nothing leaves this computer cannot quietly post every sentence
+#: you speak to a server.
+NEVER_LEAVE_MACHINE = ("CanUploadToCloudClipboard",)
+
+#: The local history is the user's own machine, so this one is conditional. It
+#: applies only while the clipboard is being used as transport - when Murmur is
+#: about to put the previous contents back. Someone who has turned that restore
+#: off has asked for the dictation to stay on the clipboard, and keeping it out
+#: of Win+V would then be working against them rather than protecting them.
+KEEP_OUT_OF_HISTORY = ("ExcludeClipboardContentFromMonitorProcessing",
+                       "CanIncludeInClipboardHistory")
+
 u32 = ctypes.WinDLL("user32", use_last_error=True)
 k32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
@@ -669,6 +697,9 @@ u32.GetClipboardData.argtypes = [wt.UINT]
 u32.GetClipboardData.restype = wt.HANDLE
 u32.SetClipboardData.argtypes = [wt.UINT, wt.HANDLE]
 u32.SetClipboardData.restype = wt.HANDLE
+u32.RegisterClipboardFormatW.argtypes = [wt.LPCWSTR]
+u32.RegisterClipboardFormatW.restype = wt.UINT
+u32.GetClipboardSequenceNumber.restype = wt.DWORD
 k32.GlobalLock.argtypes = [wt.HGLOBAL]
 k32.GlobalLock.restype = wt.LPVOID
 k32.GlobalUnlock.argtypes = [wt.HGLOBAL]
@@ -688,12 +719,18 @@ k32.QueryFullProcessImageNameW.restype = wt.BOOL
 k32.CloseHandle.argtypes = [wt.HANDLE]
 
 
-def _open_clipboard(attempts: int = 10) -> bool:
-    """The clipboard is a single global lock; other apps hold it briefly."""
+def _open_clipboard(attempts: int = 40) -> bool:
+    """The clipboard is a single global lock; other apps hold it briefly.
+
+    The budget is deliberately about a second rather than the 0.2s it used to
+    be. Losing this lock is not cosmetic - the dictation is dropped and the only
+    complaint is a print() that the windowed build has no console to show - and
+    0.2s turned out to be short enough to lose on an otherwise idle machine.
+    """
     for _ in range(attempts):
         if u32.OpenClipboard(None):
             return True
-        time.sleep(0.02)
+        time.sleep(0.025)
     return False
 
 
@@ -715,7 +752,37 @@ def clipboard_get() -> str | None:
         u32.CloseClipboard()
 
 
-def clipboard_set(text: str) -> bool:
+_formats: dict[str, int] = {}
+
+
+def _format_id(name: str) -> int:
+    """RegisterClipboardFormatW, memoised. The same name always maps to the
+    same id for the lifetime of the session, so asking twice is wasted work."""
+    if name not in _formats:
+        _formats[name] = u32.RegisterClipboardFormatW(name)
+    return _formats[name]
+
+
+def _dword_handle(value: int):
+    """A movable global holding a single DWORD, which is what the privacy
+    marker formats expect as their payload."""
+    handle = k32.GlobalAlloc(GMEM_MOVEABLE, ctypes.sizeof(wt.DWORD))
+    if not handle:
+        return None
+    ptr = k32.GlobalLock(handle)
+    ctypes.memmove(ptr, ctypes.byref(wt.DWORD(value)), ctypes.sizeof(wt.DWORD))
+    k32.GlobalUnlock(handle)
+    return handle
+
+
+def clipboard_set(text: str, marks: tuple[str, ...] = ()) -> bool:
+    """Put text on the clipboard, optionally with marker formats attached.
+
+    `marks` names the registered formats to set alongside the text - see
+    NEVER_LEAVE_MACHINE and KEEP_OUT_OF_HISTORY. Nothing is marked by default,
+    because restoring whatever the user had on the clipboard before must not
+    reclassify it: that content is theirs and was never ours to relabel.
+    """
     if not _open_clipboard():
         return False
     try:
@@ -729,7 +796,17 @@ def clipboard_set(text: str) -> bool:
         ctypes.memmove(ptr, buf, size)
         k32.GlobalUnlock(handle)
         # On success the system owns this memory - do not free it.
-        return bool(u32.SetClipboardData(CF_UNICODETEXT, handle))
+        if not u32.SetClipboardData(CF_UNICODETEXT, handle):
+            return False
+
+        # Best effort by design: an older Windows that does not know a format
+        # simply registers the name and ignores the data, and a failure here
+        # must never cost the user their paste.
+        for name in marks:
+            marker = _dword_handle(0)
+            if marker:
+                u32.SetClipboardData(_format_id(name), marker)
+        return True
     finally:
         u32.CloseClipboard()
 
@@ -784,9 +861,12 @@ def paste(text: str) -> None:
     *mods, final = combo.split("+")
 
     previous = clipboard_get()
-    if not clipboard_set(text):
+    restoring = previous is not None and load_config().get("restore_clip", True)
+    marks = NEVER_LEAVE_MACHINE + (KEEP_OUT_OF_HISTORY if restoring else ())
+    if not clipboard_set(text, marks):
         print("  ! could not write to clipboard; is another app holding it?")
         return
+    ours = u32.GetClipboardSequenceNumber()
 
     _release_modifiers()
     time.sleep(0.08)  # let the modifier release register before we press again
@@ -798,12 +878,23 @@ def paste(text: str) -> None:
     for m in reversed(mods):
         kb.release(_KEYS[m])
 
-    # Give the target app a moment to actually read the clipboard before we
-    # put the old contents back. The Sound page can turn this off, for anyone
-    # who would rather the dictation stayed on the clipboard to paste again.
-    if previous is not None and load_config().get("restore_clip", True):
-        time.sleep(0.35)
-        clipboard_set(previous)
+    # Give the target app time to actually read the clipboard before we put the
+    # old contents back - see RESTORE_DELAY for why it is as long as it is. The
+    # Sound page can turn this off, for anyone who would rather the dictation
+    # stayed on the clipboard to paste again.
+    if not restoring:
+        return
+
+    time.sleep(RESTORE_DELAY)
+
+    # If anything else wrote to the clipboard while we waited - the user copied
+    # something, another program pushed to it - that write is newer than ours,
+    # and restoring now would silently destroy it. The sequence number is the
+    # only cheap way to notice; it moves on every clipboard update and not on a
+    # read, so unchanged means nobody has touched it since we did.
+    if u32.GetClipboardSequenceNumber() != ours:
+        return
+    clipboard_set(previous)
 
 
 # ─────────────────────────────────────────────────────────────── recording ──

@@ -19,7 +19,7 @@ Nothing else is needed: no Python, no virtualenv, no administrator rights. It
 installs per-user into `%LOCALAPPDATA%\Programs\Murmur`.
 
 ```
-SHA-256  c8e018fe8c2aa93f18c86b3836fe16cd6bf536acc75d9d6e22f16002b2d8b9db
+SHA-256  83c008031d908d39fb7b5390cac23484aff69a5233deee3483b4a7a2a74a2682
 ```
 
 ### What it needs

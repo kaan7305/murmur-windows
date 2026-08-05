@@ -24,3 +24,7 @@ murmur.ico
 # they are worth committing: _cap.ps1 defaults to docs\screenshot.png, a plain
 # name this rule leaves alone.
 _*.png
+
+# Site is deployed from a private repo (murmur-site) to Vercel.
+# It must not appear in this public repository.
+site/

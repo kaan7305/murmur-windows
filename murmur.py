@@ -1,4 +1,4 @@
-"""Murmur - press a key, speak, and the text lands wherever your cursor is.
+﻿"""Murmur - press a key, speak, and the text lands wherever your cursor is.
 
 Original implementation. Nothing here is derived from another project's source.
 
@@ -176,7 +176,7 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-# ─────────────────────────────────────────────────────────── configuration ──
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ configuration â”€â”€
 
 # pynput syntax: named keys need angle brackets (<space>, <f9>, <cmd>); plain
 # characters do not (q). Getting this wrong raises ValueError at startup.
@@ -215,13 +215,6 @@ def hotkey_label(combo: str | None = None) -> list:
         caps.append(names.get(part, part.upper()))
     return caps
 
-# Measured on this machine (RTX 5070 Ti Laptop, 4.0s clip, see README):
-#   large-v3 float16       0.9x realtime   <- too slow to dictate with
-#   large-v3 int8_float16  1.1x realtime
-#   small    int8_float16  4.7x realtime   <- responsive
-# CTranslate2 4.8.1 has no native kernels for Blackwell (sm_120) and falls back
-# to JIT-compiled PTX: the GPU sits at 100% but delivers a fraction of what it
-# should. Until that lands upstream, the smaller model is the honest choice.
 MODEL = os.environ.get("MURMUR_MODEL", "small")  # small / distil-large-v3 / large-v3
 DEVICE = "cuda"                 # falls back to CPU automatically if unavailable
 COMPUTE_TYPE = "int8_float16"   # "int8" on CPU
@@ -236,7 +229,7 @@ PASTE_OVERRIDES: dict[str, str] = {
     # "conhost.exe": "ctrl+shift+v",
 }
 
-# ─────────────────────────────────────────────────────────────── the models ──
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ the models â”€â”€
 # All Whisper weights are MIT licensed and hosted by Hugging Face, so every one
 # of these can be offered freely and none of them cost anything to distribute.
 # Download sizes are approximate.
@@ -332,7 +325,7 @@ def better_model(current: str | None = None) -> str | None:
     return downloaded[-1] if downloaded else candidates[-1]
 
 
-# ── language ───────────────────────────────────────────────────────────────
+# â”€â”€ language â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Whisper knows a hundred languages and will guess which one it is hearing.
 # On a dictation-length clip that guess is unreliable: there is not much audio
 # to go on, and a wrong guess does not produce a mistranslation - it produces
@@ -422,7 +415,7 @@ def language_name(code) -> str:
     return code.upper()
 
 
-# ── vocabulary ─────────────────────────────────────────────────────────────
+# â”€â”€ vocabulary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def vocabulary() -> list:
     """Words the model should lean towards: names, jargon, product names."""
@@ -452,7 +445,7 @@ def hotwords():
 VOCABULARY_ADVISED = 60
 
 
-# ── output rules ───────────────────────────────────────────────────────────
+# â”€â”€ output rules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Vocabulary biases what the decoder hears. This fixes what it writes, which
 # is a different problem: "github" comes out lowercase every time, an address
 # comes out as "kaan at gmail dot com", and no amount of biasing the audio
@@ -530,7 +523,7 @@ def apply_rules(text: str) -> str:
     return text
 
 
-# ── the microphone ─────────────────────────────────────────────────────────
+# â”€â”€ the microphone â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _device_key(name: str) -> str:
     """A form of the name the different drivers can be compared on.
@@ -653,7 +646,7 @@ def disk_used(name: str) -> float:
         return 0.0
     return sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) / (1024 ** 3)
 
-# ─────────────────────────────────────────────────────────────── clipboard ──
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ clipboard â”€â”€
 # Done with ctypes rather than a dependency: it's a dozen calls and it means
 # one less wheel to ship when this gets packaged.
 
@@ -811,7 +804,7 @@ def clipboard_set(text: str, marks: tuple[str, ...] = ()) -> bool:
         u32.CloseClipboard()
 
 
-# ────────────────────────────────────────────────────────── foreground app ──
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ foreground app â”€â”€
 
 def foreground_process() -> str:
     """Lowercased exe name of whatever window has focus, or ''."""
@@ -834,7 +827,7 @@ def foreground_process() -> str:
     return ""
 
 
-# ───────────────────────────────────────────────────────────────── pasting ──
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ pasting â”€â”€
 
 kb = keyboard.Controller()
 
@@ -909,7 +902,7 @@ def paste(text: str) -> None:
     clipboard_set(previous)
 
 
-# ─────────────────────────────────────────────────────────────── recording ──
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ recording â”€â”€
 
 class Recorder:
     def __init__(self) -> None:
@@ -943,7 +936,7 @@ class Recorder:
         return audio[: MAX_SECONDS * SAMPLE_RATE]
 
 
-# ──────────────────────────────────────────────────────────────────── main ──
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ main â”€â”€
 
 def load_model(name: str | None = None):
     from faster_whisper import WhisperModel

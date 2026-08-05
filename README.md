@@ -176,9 +176,9 @@ asked, and why the model picks the correct homophone from context. It's also why
 it will invent a plausible sentence out of pure silence, so a voice-activity
 filter gates it: no speech detected, no text produced.
 
-## Measured speed on this machine
+## Measured speed
 
-RTX 5070 Ti Laptop (12 GB), 4.0s dictation-length clip. All configurations
+4.0s dictation-length clip on an NVIDIA GPU. All configurations
 transcribed the test sentence correctly; only the latency differs.
 
 | Model | Precision | Time | vs realtime |
@@ -191,7 +191,7 @@ transcribed the test sentence correctly; only the latency differs.
 spoke, which ruins the feel of dictating.
 
 **Without the GPU pack**, which is how the installer ships, the same clip takes
-2.6s on this machine's processor — 1.5x realtime. Slower than the card, still
+2.6s on CPU — 1.5x realtime. Slower than the card, still
 faster than speaking, and it needs no 1.6 GB download. Those two figures are
 measured cold, on the first transcription after loading, which is what someone
 pressing the shortcut for the first time actually experiences; the table above
@@ -250,7 +250,7 @@ not good at it. Detection reads the opening seconds and commits; a wrong guess
 does not produce a translation, it produces confident nonsense, because the
 decoder picks the wrong vocabulary and then writes fluently in it.
 
-Measured on this machine, same 8-second clip of English:
+Same 8-second clip of English:
 
 | Language setting | Time | Result |
 |---|---|---|

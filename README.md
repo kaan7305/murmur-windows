@@ -49,6 +49,17 @@ few people have downloaded it yet" — not "this file is malicious". A signing
 certificate costs a few hundred pounds a year, which is not something a free
 tool has, so the honest answer is to tell you rather than to hide it.
 
+**One scanner out of sixty-eight disagrees**, and it is worth saying which and
+why rather than leaving you to find it.
+[VirusTotal reads this exact file](https://www.virustotal.com/gui/file/83c008031d908d39fb7b5390cac23484aff69a5233deee3483b4a7a2a74a2682)
+— the hash above — as 1/68. The one detection is DeepInstinct, an enterprise
+tool that classifies files with a machine-learning model rather than signatures,
+and its verdict is a bare "malicious" with no malware family named, which is
+what a guess looks like standing next to a match. It is reacting to the shape of
+the file: an Inno Setup installer is a small loader with a compressed payload
+appended to it, and structurally that is also what a dropper is. The other
+sixty-seven engines do not flag it.
+
 If you would rather not take that on trust, don't: the whole program is in this
 repository, `build.bat` produces the installer from it, and running from source
 skips the installer altogether.

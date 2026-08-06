@@ -448,7 +448,7 @@ VOCABULARY_ADVISED = 60
 # â”€â”€ output rules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Vocabulary biases what the decoder hears. This fixes what it writes, which
 # is a different problem: "github" comes out lowercase every time, an address
-# comes out as "kaan at gmail dot com", and no amount of biasing the audio
+# comes out as "name at example dot com", and no amount of biasing the audio
 # side changes either, because the model heard those perfectly well.
 #
 # A rule is a pair - what it writes, what you wanted - applied to the finished
@@ -474,9 +474,9 @@ def replacements() -> list:
 
 
 #: Characters that belong tight against the word in front of them. A phrase
-#: spoken aloud carries a space before it - "kaan at gmail dot com", "hello
+#: spoken aloud carries a space before it - "name at example dot com", "hello
 #: comma world" - and replacing only the phrase leaves that space stranded:
-#: "kaan @gmail.com", "hello , world". These are the replacements where the
+#: "name @example.com", "hello , world". These are the replacements where the
 #: space was part of what was being said.
 ATTACHING = ",.!?;:)]}%@"
 
@@ -494,7 +494,7 @@ def _rule_pattern(find: str, eat_space: bool = False):
     eat_space extends the match backwards over the space in front, for the
     replacements that should sit against the previous word rather than after
     a gap. It cannot swallow a word: the boundary still has to hold, so a rule
-    for "at" matches " at" and never "kaanat".
+    for "at" matches " at" and never "attention".
     """
     left = r"\b" if find[:1].isalnum() else ""
     right = r"\b" if find[-1:].isalnum() else ""

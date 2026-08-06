@@ -294,7 +294,7 @@ than letting the extra entries do nothing silently.
 
 Vocabulary leans on what the model *hears*. Corrections fix what it *writes*,
 which is a different problem: `github` comes out lowercase every time, and an
-address comes out as "kaan at gmail dot com". The model heard both perfectly
+address comes out as "name at example dot com". The model heard both perfectly
 well, so no amount of biasing the audio side changes either.
 
 A correction is a pair — what it writes, what you wanted — applied to the
